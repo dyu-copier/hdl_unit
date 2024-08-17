@@ -1,0 +1,24 @@
+export {{ip_name|capitalize}}_ROOT=$(git rev-parse --show-toplevel)
+export BLUESPEC_HOME=/tools/bluespec/2024
+export FLUTE_REPO=/prj/tools/Flute
+BSC_PATH=$BSC_PATH:$FLUTE_REPO/src_Core/BSV_Additional_Libs
+BSC_PATH=$BSC_PATH:$FLUTE_REPO/src_Testbench/Fabrics/AXI4
+BSC_PATH=$BSC_PATH:$FLUTE_REPO/src_Testbench/Fabrics/AXI4_Lite
+BSC_PATH=$BSC_PATH:$FLUTE_REPO/src_Testbench/Fabrics/Adapters
+export BSC_PATH=$BSC_PATH:+
+
+export AWSTERIA_INFRA_REPO=/prj/tools/AWSteria_Infra
+export AWS_FPGA_REPO_DIR=/prj/tools/aws-fpga
+export HDK_COMMON_DIR=/prj/tools/aws-fpga/hdk/common
+export HDK_DIR=/prj/tools/aws-fpga/hdk
+export SDK_DIR=/prj/tools/aws-fpga/sdk
+export HDK_SHELL_DESIGN_DIR=/prj/tools/aws-fpga/hdk/common/shell_v04261818/design
+export HDK_SHELL_DIR=/prj/tools/aws-fpga/hdk/common/shell_v04261818
+export PYTHONPATH=/prj/tools/aws-fpga/shared/lib:
+export SDACCEL_DIR=/prj/tools/aws-fpga/SDAccel
+export SDK_DIR=/prj/tools/aws-fpga/sdk
+export VITIS_DIR=/prj/tools/aws-fpga/Vitis
+export VIVADO_TOOL_VERSION=v2021.1
+export VIVADO_VER="Vivado v2021.1 (64-bit)"
+export XILINX_ENABLE_AWS_WHITELIST=095707098027
+export PATH=/prj/tools/aws-fpga/shared/bin/scripts:$PATH
