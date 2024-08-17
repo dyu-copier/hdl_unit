@@ -1,0 +1,16 @@
+addrmap {{ip_name|capitalize}}_Reg {
+  name="{{ip_name|capitalize}} CSR Registers";
+  alignment=4;
+  default regwidth=32;
+  reg {
+    field {sw=r; desc="IP Version Max Number";} version_max[31:16]=0;
+    field {sw=r; desc="IP Version Min Number";} version_min[15:0]=1;
+  } Version;
+
+  //reg { } STATUS; 
+  //reg { } CTRL;
+  //reg { } INTERRUPT_Mask;
+  //reg { } INTERRUPT_STATUS;
+  //reg { } INTERRUPT_TEST;
+
+};

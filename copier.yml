@@ -1,0 +1,17 @@
+#Questions
+ip_name:
+  type: str
+  help: ip name
+
+ip_short_desc:
+  type: str
+  help: short description
+ip_long_desc:
+  type: str
+  help: long description
+author:
+  type: str
+  help: Author
+email:
+  type: str
+  help: Email

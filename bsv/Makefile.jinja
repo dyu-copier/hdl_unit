@@ -1,0 +1,20 @@
+.ONESHELL:
+SHELL=/bin/bash
+BO_DIR ?= bo
+TOP_FILE = $({{ip_name|capitalize}}_ROOT)/verilog/{{mk{ip_name|capitalize}}.v
+
+build_opts= -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -verilog -remove-dollar -steps 10000000 -vdir $(REPO_ROOT)/generated -bdir $(BO_DIR) -info-dir $(BO_DIR) -aggressive-conditions -no-warn-action-shadowing -no-show-timestamps -check-assert -show-range-conflict -keep-fires
+
+build:
+	mkdir -p $({{ip_name|capitalize}}_ROOT)/verilog/
+	$(MAKE) build_bsv 
+
+build_bsv: copy_files
+	bsc $(build_opts)   {{ip_name}}.bsv
+	grep dumpfile $(TOP_FILE) || perl -pi -e 's/endmodule/initial begin \n \$$dumpfile\("decode.vcd"\);\$$dumpvars;\n end \n endmodule/' $(TOP_FILE)
+
+copy_files:
+	cp -p  $(BLUESPEC_HOME)/lib/Verilog/FIFO2.v     $({{ip_name|capitalize}}_ROOT)/3p/verilog/
+	cp -p  $(BLUESPEC_HOME)/lib/Verilog/SizedFIFO.v $({{ip_name|capitalize}}_ROOT)/3p/verilog/
+	cp -p  $(BLUESPEC_HOME)/lib/Verilog/BRAM*.v     $({{ip_name|capitalize}}_ROOT)/3p/verilog/
+	cp -p  $(BLUESPEC_HOME)/lib/Verilog/FIFO1*.v    $({{ip_name|capitalize}}_ROOT)/3p/verilog/
