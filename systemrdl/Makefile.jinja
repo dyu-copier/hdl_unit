@@ -3,7 +3,7 @@ rtl: {{ip_name}}.rdl
 	peakrdl regblock --cpuif axi4-lite-flat --default-reset arst_n {{ip_name}}.rdl -o ../verilog
 doc:{{ip_name}}.rdl
 	peakrdl markdown {{ip_name}}.rdl  -o ../../doc/registers.md
-	sed -ie 's/## {{ip_name|capitalize}}_Reg address map/# {{ip_name|capitalize}}_Reg address map/'  ../../doc/registers.md
+	sed -ie 's/## {{ip_name|capitalize}}_Reg address map/# {{ip_name|capitalize}}_Reg address map/'  ../doc/registers.md
 html:
 	mkdir -p html
 	peakrdl html {{ip_name}}.rdl  -o html
