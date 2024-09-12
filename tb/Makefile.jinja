@@ -1,13 +1,13 @@
 tst=default
-TOPLEVEL=mk{{ip_name|capitalize}}.v
+TOPLEVEL=mk{{ip_name|capitalize}}
 MODULE=test_$(tst)
 SIM_BUILD = ${tst}_build
 ifeq ($(tst), default)
 	VERILOG_DIR=$({{ip_name|capitalize}}_ROOT)/verilog
-	VERILOG_SOURCES +=$(VERILOG_DIR)/$(TOPLEVEL)
+	VERILOG_SOURCES +=$(VERILOG_DIR)/$(TOPLEVEL).v
 else
 	VERILOG_DIR=$({{ip_name}}_ROOT)/someother_verilog
-	VERILOG_SOURCES +=$(VERILOG_DIR)/design/$(TOPLEVEL)
+	VERILOG_SOURCES +=$(VERILOG_DIR)/design/$(TOPLEVEL).v
 endif
 
 SIM ?= icarus

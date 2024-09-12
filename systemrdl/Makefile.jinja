@@ -7,3 +7,5 @@ doc:{{ip_name}}.rdl
 html:
 	mkdir -p html
 	peakrdl html {{ip_name}}.rdl  -o html
+python:
+	peakrdl python {{ip_name}}.rdl -o ../tb/ --async
