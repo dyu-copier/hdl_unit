@@ -1,0 +1,5 @@
+[verilog]
+include_paths = ["tb","fpga/verilog", "verilog"]
+defines = ["DEBUG", "FOO=1"]
+[option]
+linter = true
