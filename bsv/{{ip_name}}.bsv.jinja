@@ -1,11 +1,14 @@
 import Semi_FIFOF :: *;
+
 interface {{ip_name|capitalize}}_Ifc;
-	method action cfg({{ip_name|capitalize}}_Out_Regs regs);
+	method Action cfg({{ip_name|capitalize}}_Out_Regs regs);
 	method {{ip_name|capitalize}}_In_Regs status();
 endinterface
+
 module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
-	method action cfg({{ip_name|capitalize}}_Out_Regs regs);
+	method Action cfg({{ip_name|capitalize}}_Out_Regs regs);
 	endmethod
         method {{ip_name|capitalize}}_In_Regs status();
+		return unpack(0);
 	endmethod
 endmodule
