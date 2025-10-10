@@ -1,7 +1,7 @@
 all: csr rtl test synth
 
 csr:
-	$(MAKE) -C csr/systemrdl/
+	$(MAKE) -C systemrdl
 rtl:
 	$(MAKE) -C bsv
 test:
