@@ -3,10 +3,12 @@ SHELL=/bin/bash
 BO_DIR ?= bo
 TOP_FILE = $({{ip_name|capitalize}}_ROOT)/verilog/mk{{ip_name|capitalize}}.v
 
-build_opts= -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -verilog -remove-dollar -steps 10000000 -vdir $(REPO_ROOT)/verilog -bdir $(BO_DIR) -info-dir $(BO_DIR) -aggressive-conditions -no-warn-action-shadowing -no-show-timestamps -check-assert -show-range-conflict -keep-fires
+build_opts= -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -verilog -remove-dollar -steps 10000000 -vdir $({{ip_name|capitalize}}_ROOT)/verilog -bdir $(BO_DIR) -info-dir $(BO_DIR) -aggressive-conditions -no-warn-action-shadowing -no-show-timestamps -check-assert -show-range-conflict -keep-fires
 
-build: folders
+build: folders rdl
 	$(MAKE) build_bsv 
+rdl:
+	$(MAKE) -C ../systemrdl
 folders:
 	mkdir -p $(BO_DIR)
 	mkdir -p $({{ip_name|capitalize}}_ROOT)/verilog/

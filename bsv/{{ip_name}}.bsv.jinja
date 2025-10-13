@@ -1,14 +1,21 @@
+
 import Semi_FIFOF :: *;
+import axi4_types:: *;
+import {{ip_name|capitalize}}_Reg_csr::*;
 
 interface {{ip_name|capitalize}}_Ifc;
-	method Action cfg({{ip_name|capitalize}}_Out_Regs regs);
-	method {{ip_name|capitalize}}_In_Regs status();
+interface Ifc_axi4_master#(0,32,32,0) axi4;
 endinterface
 
+(*synthesize*)
 module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
-	method Action cfg({{ip_name|capitalize}}_Out_Regs regs);
-	endmethod
-        method {{ip_name|capitalize}}_In_Regs status();
-		return unpack(0);
-	endmethod
+
+ConfigCSR_{{ip_name|capitalize}}_Reg csr <- mkConfigCSR_{{ip_name|capitalize}}_Reg();
+Ifc_axi4_master_xactor#(0,32,32,0) xactor <- mkaxi4_master_xactor(QueueSize{
+				wr_req_depth:  1, 
+				wr_resp_depth: 1, 
+				rd_req_depth:  1, 
+				rd_resp_depth: 1}
+				);
+interface Ifc_axi4_master axi4 = xactor.axi4_side;
 endmodule
