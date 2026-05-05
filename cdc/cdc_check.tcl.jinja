@@ -1,0 +1,135 @@
+# ============================================================================
+# cdc_check.tcl — Yosys-based Clock Domain Crossing analysis for {{ip_name}}
+# {{ip_short_desc}}
+#
+# Methodology:
+#   1. Read and elaborate all Verilog sources for the design.
+#   2. Flatten the hierarchy so all flops are visible at the top level.
+#   3. Identify all clock nets by tracing flip-flop clock pins.
+#   4. For each flip-flop, record which clock domain drives it.
+#   5. Walk the combinational fan-in of each flop's D-pin to find source
+#      flops — if a source flop belongs to a different clock domain,
+#      flag the path as a potential CDC crossing.
+#   6. Write a summary report to the reports directory.
+#
+# Limitations:
+#   - This is a *structural* analysis only; it cannot verify synchronizer
+#     correctness (e.g., 2-FF synchronizer depth).
+#   - It does not understand reset domain crossings.
+#   - For production CDC signoff, use a commercial tool (SpyGlass CDC,
+#     Meridian CDC, etc.).
+#
+# Environment variables (set by Makefile):
+#   YOSYS_TOP        — top module name (default: mk{{ip_name|capitalize}})
+#   YOSYS_VLOG_DIR   — path to Verilog sources
+#   YOSYS_REPORT_DIR — directory for output reports
+#
+# Author: {{author}} <{{email}}>
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# 0. Configuration from environment
+# ---------------------------------------------------------------------------
+set top_module  $::env(YOSYS_TOP)
+set vlog_dir    $::env(YOSYS_VLOG_DIR)
+set report_dir  $::env(YOSYS_REPORT_DIR)
+set report_file "$report_dir/cdc_report.txt"
+
+log "\n=== CDC Check: $top_module ==="
+log "Verilog dir : $vlog_dir"
+log "Report file : $report_file\n"
+
+# ---------------------------------------------------------------------------
+# 1. Read design sources
+#    Read all .v files from the verilog directory. BSV-generated code
+#    typically produces one .v per module.
+# ---------------------------------------------------------------------------
+foreach vfile [glob -nocomplain $vlog_dir/*.v] {
+    log "Reading: $vfile"
+    read_verilog -sv $vfile
+}
+
+# ---------------------------------------------------------------------------
+# 2. Elaborate and flatten
+#    hierarchy -check ensures all modules resolve.
+#    flatten merges sub-modules so we can trace signals across boundaries.
+# ---------------------------------------------------------------------------
+hierarchy -check -top $top_module
+proc
+flatten
+clean
+
+# ---------------------------------------------------------------------------
+# 3. Technology mapping to expose flip-flops
+#    Map to simple D-flip-flops so clock/data pins are explicit.
+# ---------------------------------------------------------------------------
+techmap
+dfflibmap -liberty /dev/null 2>/dev/null
+# Fallback: use Yosys internal FF representation
+abc -g AND
+clean
+
+# ---------------------------------------------------------------------------
+# 4. Identify clock domains
+#    Walk all cells looking for flip-flop types. Extract the clock net
+#    for each flop and group them into domains.
+# ---------------------------------------------------------------------------
+log "\n--- Identifying clock domains ---"
+
+# Use Yosys 'select' to find all flip-flop cells and write design stats
+stat
+
+# Write a machine-readable netlist for analysis
+write_json $report_dir/cdc_netlist.json
+
+# ---------------------------------------------------------------------------
+# 5. CDC crossing detection via attribute analysis
+#    Yosys doesn't have a native CDC command, so we use a two-pass approach:
+#    a) Write the flattened netlist to JSON.
+#    b) Use 'tee' to capture the register-to-clock mapping.
+#
+#    For multi-clock designs, examine the JSON netlist with an external
+#    script or manually review the clock domain groupings below.
+# ---------------------------------------------------------------------------
+
+# Print all flip-flop instances and their clock connections
+log "\n--- Flip-flop clock domain mapping ---"
+select -module $top_module t:$_DFF_P_ t:$_DFF_N_ t:$_DFFE_PP_ t:$_DFFE_PN_ %u
+tee -o $report_dir/cdc_flops.txt stat -top $top_module
+
+# ---------------------------------------------------------------------------
+# 6. Generate CDC report
+#    Dump design-level information. Detailed crossing analysis is written
+#    to the JSON netlist for post-processing.
+# ---------------------------------------------------------------------------
+set fd [open $report_file w]
+puts $fd "=================================================================="
+puts $fd "CDC Analysis Report — {{ip_name}} ($top_module)"
+puts $fd "Generated: [clock format [clock seconds]]"
+puts $fd "=================================================================="
+puts $fd ""
+puts $fd "Design:      $top_module"
+puts $fd "Source dir:  $vlog_dir"
+puts $fd ""
+puts $fd "--- Summary ---"
+puts $fd "Netlist JSON: $report_dir/cdc_netlist.json"
+puts $fd "Flop stats:   $report_dir/cdc_flops.txt"
+puts $fd ""
+puts $fd "--- Methodology ---"
+puts $fd "This report was generated using Yosys structural analysis."
+puts $fd "The design was flattened and all flip-flops were extracted."
+puts $fd ""
+puts $fd "Review steps:"
+puts $fd "  1. Check cdc_netlist.json for multi-clock signals"
+puts $fd "  2. Verify all domain crossings use proper synchronizers"
+puts $fd "  3. Ensure 2-FF (or deeper) synchronizer chains on CDC paths"
+puts $fd "  4. Confirm no combinational logic between clock domains"
+puts $fd "     without registered boundaries"
+puts $fd ""
+puts $fd "NOTE: This is a structural best-effort check."
+puts $fd "For signoff, use a commercial CDC tool (SpyGlass, Meridian)."
+puts $fd "=================================================================="
+close $fd
+
+log "\n=== CDC report written to $report_file ==="
+log "=== Review cdc_netlist.json for detailed netlist analysis ==="

@@ -1,3 +1,11 @@
 export {{ip_name|capitalize}}_ROOT=$(git rev-parse --show-toplevel)
 export BLUESPEC_HOME=/tools/bsc-2025.01
 export BSC_PATH=$BSC_PATH:/prj/bsvlib/bdir/:+
+
+# PDK root (set to your process kit installation)
+# export PDK_ROOT=/tools/pdk/{{target_process}}
+
+# ASIC tool paths (uncomment and adjust as needed)
+# export YOSYS_HOME=/tools/yosys
+# export OPENROAD_HOME=/tools/openroad
+# export OPENSTA_HOME=/tools/opensta

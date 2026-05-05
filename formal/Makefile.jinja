@@ -1,0 +1,88 @@
+# ============================================================================
+# Makefile for Formal Verification — {{ip_name}}
+# {{ip_short_desc}}
+#
+# Open-source:
+#   sby       — SymbiYosys formal verification (default)
+#
+# Commercial stubs:
+#   jasper    — Cadence JasperGold (requires license)
+#
+# Author: {{author}} <{{email}}>
+# ============================================================================
+.ONESHELL:
+SHELL := /bin/bash
+
+# ---------------------------------------------------------------------------
+# Paths & variables
+# ---------------------------------------------------------------------------
+VERILOG_DIR   := $({{ip_name|capitalize}}_ROOT)/verilog
+TOP_MODULE    := mk{{ip_name|capitalize}}
+SBY_FILE      := {{ip_name}}.sby
+REPORT_DIR    := reports
+
+# ---------------------------------------------------------------------------
+# Default target
+# ---------------------------------------------------------------------------
+all: sby
+
+# ---------------------------------------------------------------------------
+# Create report directory
+# ---------------------------------------------------------------------------
+$(REPORT_DIR):
+	mkdir -p $(REPORT_DIR)
+
+# ---------------------------------------------------------------------------
+# SymbiYosys formal verification (open-source, default)
+#
+# Runs both 'prove' and 'cover' tasks defined in the .sby file.
+# Results are written to task-specific directories and summarised
+# in the reports folder.
+# ---------------------------------------------------------------------------
+.PHONY: sby
+sby: $(REPORT_DIR)
+	@echo "=== SymbiYosys Formal: $(TOP_MODULE) ==="
+	sby -f $(SBY_FILE) 2>&1 | tee $(REPORT_DIR)/sby.log
+	@echo "Report: $(REPORT_DIR)/sby.log"
+
+# Run only the prove task
+.PHONY: sby-prove
+sby-prove: $(REPORT_DIR)
+	@echo "=== SymbiYosys Prove: $(TOP_MODULE) ==="
+	sby -f $(SBY_FILE) prove 2>&1 | tee $(REPORT_DIR)/sby_prove.log
+
+# Run only the cover task
+.PHONY: sby-cover
+sby-cover: $(REPORT_DIR)
+	@echo "=== SymbiYosys Cover: $(TOP_MODULE) ==="
+	sby -f $(SBY_FILE) cover 2>&1 | tee $(REPORT_DIR)/sby_cover.log
+
+# ---------------------------------------------------------------------------
+# Cadence JasperGold (commercial — stub)
+# ---------------------------------------------------------------------------
+.PHONY: jasper
+jasper: $(REPORT_DIR)
+	@echo "=== JasperGold Formal: $(TOP_MODULE) ==="
+	@echo "NOTE: JasperGold requires a commercial license from Cadence."
+	@echo "Configure JASPER_HOME and update this target for your environment."
+	# jg -batch -tcl jasper_formal.tcl \
+	#   2>&1 | tee $(REPORT_DIR)/jasper_formal.rpt
+	@echo "JasperGold target is a stub — edit formal/Makefile to enable."
+
+# ---------------------------------------------------------------------------
+# Clean
+# ---------------------------------------------------------------------------
+.PHONY: clean
+clean:
+	rm -rf $(REPORT_DIR)
+	rm -rf {{ip_name}}_prove {{ip_name}}_cover
+
+.PHONY: help
+help:
+	@echo "Formal verification targets for {{ip_name}}:"
+	@echo "  make            — run SymbiYosys prove + cover (default)"
+	@echo "  make sby        — run all SymbiYosys tasks"
+	@echo "  make sby-prove  — run prove task only"
+	@echo "  make sby-cover  — run cover task only"
+	@echo "  make jasper     — JasperGold (stub)"
+	@echo "  make clean      — remove reports and work directories"

@@ -1,0 +1,54 @@
+.ONESHELL:
+SHELL=/bin/bash
+
+TOP_MODULE = mk{{ip_name|capitalize}}
+NETLIST    = ../synth/output/$(TOP_MODULE)_synth.v
+SDC_FILE   = ../constraints/{{ip_name}}.sdc
+TECH_LEF  ?= $(PDK_ROOT)/lef/tech.lef
+MACRO_LEF ?= $(PDK_ROOT)/lef/cells.lef
+
+OUTPUT_DIR = output
+REPORT_DIR = reports
+
+# ============================================================
+# OpenROAD (open-source, default)
+# ============================================================
+.PHONY: pnr clean all
+
+all: pnr
+
+pnr: folders
+	openroad openroad_flow.tcl 2>&1 | tee $(REPORT_DIR)/openroad.log
+
+# ============================================================
+# Synopsys ICC2 (commercial — stub)
+# ============================================================
+.PHONY: icc2
+
+icc2: folders
+	@echo "==================================================================="
+	@echo " ICC2 flow — stub"
+	@echo " Set ICC2_HOME and provide your icc2_shell script to enable."
+	@echo "==================================================================="
+	@echo "  icc2_shell -f run_icc2.tcl"
+	@exit 1
+
+# ============================================================
+# Cadence Innovus (commercial — stub)
+# ============================================================
+.PHONY: innovus
+
+innovus: folders
+	@echo "==================================================================="
+	@echo " Innovus flow — stub"
+	@echo " Set INNOVUS_HOME and provide your Innovus script to enable."
+	@echo "==================================================================="
+	@echo "  innovus -files run_innovus.tcl"
+	@exit 1
+
+folders:
+	mkdir -p $(OUTPUT_DIR)
+	mkdir -p $(REPORT_DIR)
+
+clean:
+	rm -rf $(OUTPUT_DIR) $(REPORT_DIR)

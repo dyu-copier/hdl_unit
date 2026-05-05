@@ -1,0 +1,72 @@
+# ============================================================================
+# DRC / LVS Physical Verification Makefile — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+# ============================================================================
+.ONESHELL:
+SHELL=/bin/bash
+
+# ── Project paths ───────────────────────────────────────────────────────────
+TOP_MODULE   ?= mk{{ip_name|capitalize}}
+GDS_DIR      ?= $({{ip_name|capitalize}}_ROOT)/pnr/output
+GDS_FILE     ?= $(GDS_DIR)/$(TOP_MODULE).gds
+VERILOG_GL   ?= $(GDS_DIR)/$(TOP_MODULE).gl.v
+REPORTS_DIR  ?= reports
+
+# ── Magic settings (open-source DRC) ───────────────────────────────────────
+MAGIC        ?= magic
+MAGIC_TCL    ?= magic_drc.tcl
+TECH_FILE    ?= $(PDK_ROOT)/libs.tech/magic/sky130A.tech
+
+# ── Calibre settings (commercial DRC/LVS) ─────────────────────────────────
+CALIBRE_DRC  ?= calibre -drc
+CALIBRE_LVS  ?= calibre -lvs
+DRC_RULES    ?= $(PDK_ROOT)/calibre/drc_rules
+LVS_RULES    ?= $(PDK_ROOT)/calibre/lvs_rules
+
+# ============================================================================
+#  Magic DRC (Open-Source)
+# ============================================================================
+
+.PHONY: drc lvs folders clean
+
+folders:
+	mkdir -p $(REPORTS_DIR)
+
+drc: folders
+	$(MAGIC) -dnull -noconsole -rcfile $(TECH_FILE) < $(MAGIC_TCL) \
+	  2>&1 | tee $(REPORTS_DIR)/magic_drc.log
+	@echo "[drc] Magic DRC complete. Report: $(REPORTS_DIR)/magic_drc.rpt"
+
+# ============================================================================
+#  Calibre DRC (Commercial) — Stub
+# ============================================================================
+
+.PHONY: calibre_drc calibre_lvs
+
+calibre_drc: folders
+	@echo "[drc] Calibre DRC — not yet configured"
+	@echo "TODO: Set DRC_RULES to point to your PDK rule deck"
+	# $(CALIBRE_DRC) -batch \
+	#   -hier \
+	#   $(DRC_RULES) \
+	#   -input $(GDS_FILE) \
+	#   -output $(REPORTS_DIR)/calibre_drc.rpt
+
+calibre_lvs: folders
+	@echo "[lvs] Calibre LVS — not yet configured"
+	@echo "TODO: Set LVS_RULES and provide the netlist for comparison"
+	# $(CALIBRE_LVS) -batch \
+	#   -hier \
+	#   $(LVS_RULES) \
+	#   -input $(GDS_FILE) \
+	#   -input2 $(VERILOG_GL) \
+	#   -output $(REPORTS_DIR)/calibre_lvs.rpt
+
+# ============================================================================
+#  Clean
+# ============================================================================
+
+clean:
+	rm -rf $(REPORTS_DIR)
+	@echo "[drc] Clean complete."

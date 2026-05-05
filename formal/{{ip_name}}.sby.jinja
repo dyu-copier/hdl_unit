@@ -1,0 +1,93 @@
+# ============================================================================
+# SymbiYosys configuration — {{ip_name}}
+# {{ip_short_desc}}
+#
+# This file defines the formal verification setup for SymbiYosys (sby).
+# It is organised into sections that control tasks, solver options,
+# engine selection, synthesis script, and source file lists.
+#
+# Usage:
+#   sby -f {{ip_name}}.sby              # run all tasks (prove + cover)
+#   sby -f {{ip_name}}.sby prove        # run prove only
+#   sby -f {{ip_name}}.sby cover        # run cover only
+#
+# Author: {{author}} <{{email}}>
+# ============================================================================
+
+# ---------------------------------------------------------------------------
+# [tasks]  —  Define verification tasks
+#
+# Each task name becomes a subdirectory for results.  Tasks can override
+# options/engines by using conditional tags (task name as prefix).
+#
+#   prove  — Attempt to prove all SVA/PSL assertions hold for all reachable
+#             states (bounded model checking up to the configured depth).
+#   cover  — Check that all cover() statements are reachable, ensuring the
+#             design constraints are not over-constrained.
+# ---------------------------------------------------------------------------
+[tasks]
+prove
+cover
+
+# ---------------------------------------------------------------------------
+# [options]  —  Per-task solver options
+#
+# mode prove   — bounded model checking; tries to find assertion violations.
+# mode cover   — reachability analysis; tries to hit cover() targets.
+# depth N      — number of clock cycles to unroll.  Increase if proofs are
+#                inconclusive or cover targets are not reached.  Deeper
+#                values increase runtime significantly.
+# timeout N    — wall-clock seconds before the solver aborts (0 = no limit).
+# ---------------------------------------------------------------------------
+[options]
+prove: mode prove
+prove: depth 20
+cover: mode cover
+cover: depth 40
+
+# ---------------------------------------------------------------------------
+# [engines]  —  Solver engine selection
+#
+# smtbmc  — SMT-based bounded model checking.  Uses Yices 2 by default
+#            (fast for most designs).  Alternatives:
+#              smtbmc boolector   — bit-vector focused, good for data paths
+#              smtbmc z3          — general-purpose, wide theory support
+#              abc bmc3           — ABC's native BMC (AIG-based, very fast)
+#              abc pdr            — Property Directed Reachability (unbounded)
+#
+# For BSV-generated designs the default smtbmc (yices) is a solid starting
+# point.  Switch to abc pdr for unbounded proofs on simpler properties.
+# ---------------------------------------------------------------------------
+[engines]
+smtbmc
+
+# ---------------------------------------------------------------------------
+# [script]  —  Yosys synthesis script
+#
+# This runs inside Yosys to elaborate the design before handing it to the
+# solver engine.  Steps:
+#   1. read_verilog -sv   — parse all sources (SystemVerilog mode for any
+#                           SVA assertions embedded in the RTL).
+#   2. prep -top          — elaborate, flatten, and optimise for formal.
+#                           The -top flag selects the module under test.
+#
+# If your design uses additional include paths or defines, add them here:
+#   read_verilog -sv -I<path> -D<DEFINE>=<value> ...
+# ---------------------------------------------------------------------------
+[script]
+read_verilog -sv {{ip_name}}.v
+prep -top mk{{ip_name|capitalize}}
+
+# ---------------------------------------------------------------------------
+# [files]  —  Source files to copy into the work directory
+#
+# SymbiYosys copies these files into a temporary work directory before
+# running the script above.  Paths are relative to the .sby file location.
+# Use $({{ip_name|capitalize}}_ROOT) in the Makefile to construct the path;
+# here we reference the verilog directory directly.
+#
+# Add additional files (e.g. helper modules, BSV library primitives)
+# on separate lines as needed.
+# ---------------------------------------------------------------------------
+[files]
+../verilog/mk{{ip_name|capitalize}}.v

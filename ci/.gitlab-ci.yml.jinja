@@ -1,0 +1,196 @@
+# ============================================================================
+# GitLab CI Pipeline — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+#
+# Stages:
+#   lint     — RTL linting and style checks
+#   build    — CSR generation and RTL compilation
+#   verify   — Simulation, formal verification
+#   backend  — Synthesis, STA, power, PnR, DRC
+# ============================================================================
+
+stages:
+  - lint
+  - build
+  - verify
+  - backend
+
+# ── Global defaults ─────────────────────────────────────────────────────────
+default:
+  before_script:
+    - export {{ip_name|capitalize}}_ROOT=$(pwd)
+    - export BLUESPEC_HOME=${BLUESPEC_HOME:-/tools/bsc-2025.01}
+    - export BSC_PATH=${BSC_PATH:-/prj/bsvlib/bdir/:+}
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+# ============================================================================
+#  Stage: lint
+# ============================================================================
+
+lint:
+  stage: lint
+  script:
+    - make -C lint
+  artifacts:
+    when: always
+    paths:
+      - lint/reports/
+    expire_in: 7 days
+  tags:
+    - hdl
+
+# ============================================================================
+#  Stage: build
+# ============================================================================
+
+csr:
+  stage: build
+  script:
+    - make -C systemrdl
+  artifacts:
+    paths:
+      - verilog/
+      - bsv/*_csr*
+      - doc/registers.md
+    expire_in: 7 days
+  tags:
+    - hdl
+
+rtl:
+  stage: build
+  needs: [csr]
+  script:
+    - make -C bsv
+  artifacts:
+    paths:
+      - verilog/
+    expire_in: 7 days
+  tags:
+    - hdl
+
+# ============================================================================
+#  Stage: verify
+# ============================================================================
+
+test:
+  stage: verify
+  needs: [rtl]
+  script:
+    - make -C tb
+  artifacts:
+    when: always
+    paths:
+      - tb/results.xml
+      - tb/reports/
+      - tb/*.vcd
+    reports:
+      junit: tb/results.xml
+    expire_in: 7 days
+  tags:
+    - hdl
+
+formal:
+  stage: verify
+  needs: [rtl]
+  script:
+    - make -C formal
+  artifacts:
+    when: always
+    paths:
+      - formal/reports/
+    expire_in: 7 days
+  allow_failure: true
+  tags:
+    - hdl
+
+# ============================================================================
+#  Stage: backend
+# ============================================================================
+
+synthesis:
+  stage: backend
+  needs: [rtl]
+  script:
+    - make -C synth
+  artifacts:
+    when: always
+    paths:
+      - synth/reports/
+      - synth/output/
+    expire_in: 14 days
+  tags:
+    - hdl-backend
+
+sta:
+  stage: backend
+  needs: [synthesis]
+  script:
+    - make -C sta
+  artifacts:
+    when: always
+    paths:
+      - sta/reports/
+    expire_in: 14 days
+  tags:
+    - hdl-backend
+
+power:
+  stage: backend
+  needs: [synthesis]
+  script:
+    - make -C power
+  artifacts:
+    when: always
+    paths:
+      - power/reports/
+    expire_in: 14 days
+  tags:
+    - hdl-backend
+
+pnr:
+  stage: backend
+  needs: [synthesis]
+  script:
+    - make -C pnr
+  artifacts:
+    when: always
+    paths:
+      - pnr/reports/
+      - pnr/output/
+    expire_in: 14 days
+  tags:
+    - hdl-backend
+
+drc:
+  stage: backend
+  needs: [pnr]
+  script:
+    - make -C drc
+  artifacts:
+    when: always
+    paths:
+      - drc/reports/
+    expire_in: 14 days
+  tags:
+    - hdl-backend
+
+# ============================================================================
+#  Report Collection (manual trigger)
+# ============================================================================
+
+ci_report:
+  stage: backend
+  needs: [lint, test, formal, synthesis, sta, power, pnr, drc]
+  when: manual
+  script:
+    - make -C ci ci_report
+  artifacts:
+    when: always
+    paths:
+      - ci/reports/
+    expire_in: 30 days
+  tags:
+    - hdl

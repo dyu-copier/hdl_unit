@@ -1,0 +1,139 @@
+# ============================================================================
+# Vivado Non-Project TCL Flow — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+#
+# Usage:
+#   vivado -mode batch -source vivado_flow.tcl -tclargs \
+#     --part <part> --top <module> --verilog_dir <dir> \
+#     --xdc <file> --build_dir <dir> --stop_after <stage>
+#
+# Stages: synth, impl, bitstream
+# ============================================================================
+
+# ── Parse command-line arguments ────────────────────────────────────────────
+set part        "xc7a35tcpg236-1"
+set top         "mk{{ip_name|capitalize}}"
+set verilog_dir "../verilog"
+set xdc_file    "{{ip_name}}.xdc"
+set build_dir   "build"
+set stop_after  "bitstream"
+
+for {set i 0} {$i < [llength $argv]} {incr i} {
+    set arg [lindex $argv $i]
+    switch -- $arg {
+        --part        { incr i; set part        [lindex $argv $i] }
+        --top         { incr i; set top         [lindex $argv $i] }
+        --verilog_dir { incr i; set verilog_dir [lindex $argv $i] }
+        --xdc         { incr i; set xdc_file    [lindex $argv $i] }
+        --build_dir   { incr i; set build_dir   [lindex $argv $i] }
+        --stop_after  { incr i; set stop_after  [lindex $argv $i] }
+        default       { puts "WARNING: Unknown argument: $arg" }
+    }
+}
+
+set reports_dir "${build_dir}/reports"
+set bit_dir     "${build_dir}/bitstream"
+
+file mkdir $reports_dir
+file mkdir $bit_dir
+
+puts "============================================================"
+puts "  {{ip_name|capitalize}} — Vivado Non-Project Flow"
+puts "  Part:        $part"
+puts "  Top module:  $top"
+puts "  Verilog dir: $verilog_dir"
+puts "  XDC file:    $xdc_file"
+puts "  Build dir:   $build_dir"
+puts "  Stop after:  $stop_after"
+puts "============================================================"
+
+# ============================================================================
+#  1. Read Sources
+# ============================================================================
+
+# Read all Verilog files from the verilog directory
+foreach src [glob -nocomplain ${verilog_dir}/*.v] {
+    puts "Reading: $src"
+    read_verilog $src
+}
+
+# Read SystemVerilog files if present
+foreach src [glob -nocomplain ${verilog_dir}/*.sv] {
+    puts "Reading: $src"
+    read_verilog -sv $src
+}
+
+# Read XDC constraints
+if {[file exists $xdc_file]} {
+    puts "Reading constraints: $xdc_file"
+    read_xdc $xdc_file
+} else {
+    puts "WARNING: Constraints file not found: $xdc_file"
+}
+
+# ============================================================================
+#  2. Synthesis
+# ============================================================================
+
+puts "\n>>> Running Synthesis..."
+synth_design -top $top -part $part -flatten_hierarchy rebuilt
+
+# Post-synthesis reports
+report_utilization -file ${reports_dir}/post_synth_utilization.rpt
+report_timing_summary -file ${reports_dir}/post_synth_timing.rpt
+
+# Write checkpoint
+write_checkpoint -force ${build_dir}/${top}_synth.dcp
+
+if {$stop_after eq "synth"} {
+    puts "Stopping after synthesis as requested."
+    exit 0
+}
+
+# ============================================================================
+#  3. Optimization, Placement, Routing
+# ============================================================================
+
+puts "\n>>> Optimizing design..."
+opt_design
+
+puts "\n>>> Placing design..."
+place_design
+
+# Post-placement reports
+report_utilization -file ${reports_dir}/post_place_utilization.rpt
+report_timing_summary -file ${reports_dir}/post_place_timing.rpt
+
+puts "\n>>> Routing design..."
+route_design
+
+# Post-route reports
+report_utilization -file ${reports_dir}/post_route_utilization.rpt
+report_timing_summary -file ${reports_dir}/post_route_timing.rpt
+report_timing -sort_by group -max_paths 10 \
+    -file ${reports_dir}/post_route_timing_detail.rpt
+report_drc -file ${reports_dir}/post_route_drc.rpt
+report_power -file ${reports_dir}/post_route_power.rpt
+
+# Write checkpoint
+write_checkpoint -force ${build_dir}/${top}_routed.dcp
+
+if {$stop_after eq "impl"} {
+    puts "Stopping after implementation as requested."
+    exit 0
+}
+
+# ============================================================================
+#  4. Bitstream Generation
+# ============================================================================
+
+puts "\n>>> Writing bitstream..."
+write_bitstream -force ${bit_dir}/${top}.bit
+
+puts "\n============================================================"
+puts "  Bitstream written: ${bit_dir}/${top}.bit"
+puts "  Reports in:        ${reports_dir}/"
+puts "============================================================"
+
+exit 0

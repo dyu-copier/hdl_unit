@@ -1,0 +1,89 @@
+# ============================================================================
+# Yosys Synthesis Script for {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+#
+# This script is invoked by the synth Makefile. Variables are passed via
+# yosys -D flags:
+#   VERILOG_DIR, TOP_MODULE, LIBERTY_FILE, OUTPUT_DIR, REPORTS_DIR
+# ============================================================================
+
+# ----------------------------------------------------------------------
+# Read design sources
+# ----------------------------------------------------------------------
+# Read all Verilog files from the verilog directory
+read_verilog -sv [glob ../verilog/*.v]
+
+# ----------------------------------------------------------------------
+# Hierarchy check and elaboration
+# ----------------------------------------------------------------------
+hierarchy -check -top mk{{ip_name|capitalize}}
+
+# ----------------------------------------------------------------------
+# High-level synthesis passes
+# ----------------------------------------------------------------------
+# Convert processes to netlists
+proc
+
+# Flatten the design hierarchy
+flatten
+
+# General optimisation
+opt
+
+# FSM extraction and optimisation
+fsm
+opt
+
+# Memory inference and optimisation
+memory
+opt
+
+# ----------------------------------------------------------------------
+# Technology mapping
+# ----------------------------------------------------------------------
+techmap
+opt
+
+# ----------------------------------------------------------------------
+# ABC logic optimisation / technology mapping
+# If a Liberty file is available, use it for cell mapping;
+# otherwise fall back to built-in gate library.
+# ----------------------------------------------------------------------
+if {[file exists $::env(LIBERTY_FILE)]} {
+    abc -liberty $::env(LIBERTY_FILE)
+} else {
+    abc
+}
+
+# Final cleanup
+opt_clean -purge
+
+# ----------------------------------------------------------------------
+# Reports
+# ----------------------------------------------------------------------
+# Ensure reports directory exists
+exec mkdir -p reports
+
+# Area / cell statistics report
+tee -o reports/mk{{ip_name|capitalize}}_area.rpt stat
+
+# If liberty was used, generate a mapped-cell stat report
+if {[file exists $::env(LIBERTY_FILE)]} {
+    tee -o reports/mk{{ip_name|capitalize}}_area_mapped.rpt stat -liberty $::env(LIBERTY_FILE)
+}
+
+# Print timing estimate (basic Yosys STA when liberty is present)
+# Note: for accurate timing use an external STA tool with the SDC file
+
+# ----------------------------------------------------------------------
+# Write synthesized netlist
+# ----------------------------------------------------------------------
+exec mkdir -p output
+write_verilog -noattr output/mk{{ip_name|capitalize}}_synth.v
+
+log "============================================"
+log " Synthesis of mk{{ip_name|capitalize}} complete"
+log " Netlist : output/mk{{ip_name|capitalize}}_synth.v"
+log " Reports : reports/"
+log "============================================"

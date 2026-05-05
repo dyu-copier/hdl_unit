@@ -1,0 +1,85 @@
+// ============================================================================
+// Verilator lint flags for {{ip_name}} (BSV-generated Verilog)
+//
+// Usage: verilator --lint-only $(cat verilator.flags) ...
+//
+// BSV (Bluespec) generates Verilog with idioms that trigger certain Verilator
+// warnings which are safe to suppress. This file tunes the warnings for a
+// clean, actionable lint report.
+//
+// Author: {{author}} <{{email}}>
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// Enable all warnings as the baseline, then selectively suppress.
+// ---------------------------------------------------------------------------
+-Wall
+
+// ---------------------------------------------------------------------------
+// Warnings suppressed for BSV-generated code
+// ---------------------------------------------------------------------------
+
+// UNUSED: BSV generates signals/ports that may be unconnected at the top level
+// (e.g. RDY_* signals that are not consumed). Safe to suppress globally.
+-Wno-UNUSED
+
+// UNDRIVEN: BSV can leave module ports undriven when interfaces are only
+// partially used. These are benign in generated code.
+-Wno-UNDRIVEN
+
+// PINCONNECTEMPTY: BSV wrappers often leave submodule output ports
+// unconnected. Verilator flags these; they are expected.
+-Wno-PINCONNECTEMPTY
+
+// DECLFILENAME: BSV generates module names (mk{{ip_name|capitalize}}, etc.) that may not
+// match the filename. This is standard BSV output structure.
+-Wno-DECLFILENAME
+
+// WIDTH: BSV frequently uses width-mismatched assignments internally
+// (e.g. packing/unpacking structs). Most are intentional truncations or
+// zero-extensions inserted by the BSV compiler.
+-Wno-WIDTH
+
+// CASEINCOMPLETE: BSV rule scheduling can produce case statements that appear
+// incomplete to Verilator but are fully covered by BSV's CAN_FIRE guards.
+-Wno-CASEINCOMPLETE
+
+// CASEOVERLAP: BSV may generate overlapping case items for priority-encoded
+// rule selection. These are correct by construction.
+-Wno-CASEOVERLAP
+
+// INITIALDLY: BSV uses initial blocks with delays for VCD dumping and
+// simulation scaffolding. Not relevant for synthesis lint.
+-Wno-INITIALDLY
+
+// STMTDLY: BSV simulation wrappers use #-delays in initial blocks.
+// These are simulation-only constructs, safe to ignore for lint.
+-Wno-STMTDLY
+
+// BLKSEQ: BSV generates blocking assignments inside always @(posedge clk)
+// blocks for combinational temporaries. The BSV compiler ensures correct
+// semantics; these are safe.
+-Wno-BLKSEQ
+
+// COMBDLY: BSV may use non-blocking assignments in combinational blocks
+// as part of its scheduling model. Safe for generated code.
+-Wno-COMBDLY
+
+// ---------------------------------------------------------------------------
+// Warnings kept ENABLED (these catch real issues even in BSV output)
+// ---------------------------------------------------------------------------
+
+// MULTIDRIVEN — Multiple drivers on a net indicate a real conflict.
+// UNSIGNED    — Unsigned comparison issues may reveal logic bugs.
+// LITENDIAN   — Little-endian bit ranges can indicate port mismatches.
+// IMPORTSTAR  — Wildcard imports can mask naming issues.
+
+// ---------------------------------------------------------------------------
+// Lint-related options
+// ---------------------------------------------------------------------------
+
+// Generate XML output for downstream tooling (optional; remove if not needed)
+// --xml-only
+
+// Limit error count before aborting (0 = unlimited)
+-error-limit 200

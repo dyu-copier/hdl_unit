@@ -1,0 +1,108 @@
+# ============================================================================
+# FPGA Prototyping Makefile — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+# ============================================================================
+.ONESHELL:
+SHELL=/bin/bash
+
+# ── Project paths ───────────────────────────────────────────────────────────
+TOP_MODULE   ?= mk{{ip_name|capitalize}}
+VERILOG_DIR  ?= $({{ip_name|capitalize}}_ROOT)/verilog
+CONSTRAINTS_DIR ?= $({{ip_name|capitalize}}_ROOT)/fpga
+
+# ── Vivado (Xilinx) settings ────────────────────────────────────────────────
+VIVADO       ?= vivado
+VIVADO_FLAGS ?= -mode batch -nojournal -nolog
+VIVADO_TCL   ?= vivado_flow.tcl
+XDC_FILE     ?= $(CONSTRAINTS_DIR)/{{ip_name}}.xdc
+FPGA_PART    ?= xc7a35tcpg236-1
+
+# ── Quartus (Intel) settings ────────────────────────────────────────────────
+QUARTUS_SH   ?= quartus_sh
+QUARTUS_MAP  ?= quartus_map
+QUARTUS_FIT  ?= quartus_fit
+QUARTUS_ASM  ?= quartus_asm
+QUARTUS_STA  ?= quartus_sta
+QPF_FILE     ?= $(TOP_MODULE).qpf
+
+# ── Output directories ──────────────────────────────────────────────────────
+BUILD_DIR    ?= build
+REPORTS_DIR  ?= $(BUILD_DIR)/reports
+BIT_DIR      ?= $(BUILD_DIR)/bitstream
+
+# ── Verilog sources ─────────────────────────────────────────────────────────
+VERILOG_SOURCES := $(wildcard $(VERILOG_DIR)/*.v)
+
+# ============================================================================
+#  Vivado (Xilinx) Targets
+# ============================================================================
+
+.PHONY: synth impl bitstream program clean folders
+
+folders:
+	mkdir -p $(BUILD_DIR) $(REPORTS_DIR) $(BIT_DIR)
+
+synth: folders
+	$(VIVADO) $(VIVADO_FLAGS) -source $(VIVADO_TCL) \
+	  -tclargs --part $(FPGA_PART) \
+	           --top $(TOP_MODULE) \
+	           --verilog_dir $(VERILOG_DIR) \
+	           --xdc $(XDC_FILE) \
+	           --build_dir $(BUILD_DIR) \
+	           --stop_after synth
+
+impl: folders
+	$(VIVADO) $(VIVADO_FLAGS) -source $(VIVADO_TCL) \
+	  -tclargs --part $(FPGA_PART) \
+	           --top $(TOP_MODULE) \
+	           --verilog_dir $(VERILOG_DIR) \
+	           --xdc $(XDC_FILE) \
+	           --build_dir $(BUILD_DIR) \
+	           --stop_after impl
+
+bitstream: folders
+	$(VIVADO) $(VIVADO_FLAGS) -source $(VIVADO_TCL) \
+	  -tclargs --part $(FPGA_PART) \
+	           --top $(TOP_MODULE) \
+	           --verilog_dir $(VERILOG_DIR) \
+	           --xdc $(XDC_FILE) \
+	           --build_dir $(BUILD_DIR) \
+	           --stop_after bitstream
+
+program:
+	$(VIVADO) $(VIVADO_FLAGS) -source program.tcl \
+	  -tclargs --bitfile $(BIT_DIR)/$(TOP_MODULE).bit
+
+# ============================================================================
+#  Quartus (Intel) Targets — Stubs
+# ============================================================================
+
+.PHONY: quartus_synth quartus_fit quartus_asm quartus_program
+
+quartus_synth:
+	@echo "[Quartus] Synthesis — not yet configured"
+	@echo "TODO: Create $(QPF_FILE) and QSF project settings"
+	# $(QUARTUS_MAP) --read_settings_files=on $(TOP_MODULE)
+
+quartus_fit:
+	@echo "[Quartus] Fitting — not yet configured"
+	# $(QUARTUS_FIT) $(TOP_MODULE)
+
+quartus_asm:
+	@echo "[Quartus] Assembly — not yet configured"
+	# $(QUARTUS_ASM) $(TOP_MODULE)
+
+quartus_program:
+	@echo "[Quartus] Programming — not yet configured"
+	# quartus_pgm -c 1 -m jtag -o "p;$(TOP_MODULE).sof"
+
+# ============================================================================
+#  Clean
+# ============================================================================
+
+clean:
+	rm -rf $(BUILD_DIR)
+	rm -f vivado*.log vivado*.jou
+	rm -rf .Xil
+	@echo "[fpga] Clean complete."

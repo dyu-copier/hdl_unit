@@ -1,3 +1,8 @@
+_subdirectory: .
+_exclude:
+  - "{% if not enable_fpga %}fpga{% endif %}"
+  - "{% if not enable_formal %}formal{% endif %}"
+
 #Questions
 ip_name:
   type: str
@@ -15,3 +20,50 @@ author:
 email:
   type: str
   help: Email
+
+target_process:
+  type: str
+  help: "Target process node e.g. sky130, gf180, asap7"
+  default: "sky130"
+
+clock_freq_mhz:
+  type: int
+  help: "Target clock frequency in MHz"
+  default: 100
+
+bus_protocol:
+  type: str
+  help: "Bus protocol"
+  default: "axi4-lite"
+  choices:
+    - "axi4-lite"
+    - "axi4"
+    - "ahb"
+    - "apb"
+    - "wishbone"
+
+enable_fpga:
+  type: bool
+  help: "Include FPGA prototyping flow"
+  default: true
+
+enable_formal:
+  type: bool
+  help: "Include formal verification flow"
+  default: true
+
+fpga_part:
+  type: str
+  help: "FPGA part number"
+  default: "xc7a35tcpg236-1"
+  when: "{{ enable_fpga }}"
+
+liberty_file:
+  type: str
+  help: "Path to liberty (.lib) timing library"
+  default: ""
+
+lef_file:
+  type: str
+  help: "Path to LEF technology file"
+  default: ""

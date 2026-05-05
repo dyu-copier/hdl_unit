@@ -1,0 +1,44 @@
+.ONESHELL:
+SHELL=/bin/bash
+
+TOP_MODULE = mk{{ip_name|capitalize}}
+NETLIST  = ../synth/output/$(TOP_MODULE)_synth.v
+SDC_FILE = ../constraints/{{ip_name}}.sdc
+LIB_FILE ?= $(PDK_ROOT)/lib/typical.lib
+
+REPORT_DIR = reports
+
+# ============================================================
+# OpenSTA (open-source, default)
+# ============================================================
+.PHONY: sta clean setup hold all
+
+all: sta
+
+sta: folders
+	sta run_sta.tcl
+
+setup: folders
+	sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/setup_summary.rpt
+
+hold: folders
+	sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/hold_summary.rpt
+
+# ============================================================
+# PrimeTime (Synopsys commercial — stub)
+# ============================================================
+.PHONY: pt
+
+pt: folders
+	@echo "==================================================================="
+	@echo " PrimeTime flow — stub"
+	@echo " Set PT_HOME and provide your pt_shell script to enable."
+	@echo "==================================================================="
+	@echo "  pt_shell -f run_pt.tcl"
+	@exit 1
+
+folders:
+	mkdir -p $(REPORT_DIR)
+
+clean:
+	rm -rf $(REPORT_DIR)

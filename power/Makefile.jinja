@@ -1,0 +1,39 @@
+.ONESHELL:
+SHELL=/bin/bash
+
+TOP_MODULE = mk{{ip_name|capitalize}}
+NETLIST    = ../synth/output/$(TOP_MODULE)_synth.v
+SDC_FILE   = ../constraints/{{ip_name}}.sdc
+LIB_FILE  ?= $(PDK_ROOT)/lib/typical.lib
+ACTIVITY  ?= ../tb/$(TOP_MODULE).vcd
+
+REPORT_DIR = reports
+
+# ============================================================
+# OpenSTA power estimation (open-source, default)
+# ============================================================
+.PHONY: power clean all
+
+all: power
+
+power: folders
+	sta run_power.tcl 2>&1 | tee $(REPORT_DIR)/power.log
+
+# ============================================================
+# PrimePower (Synopsys commercial — stub)
+# ============================================================
+.PHONY: primepower
+
+primepower: folders
+	@echo "==================================================================="
+	@echo " PrimePower flow — stub"
+	@echo " Set PRIMEPOWER_HOME and provide your pt_shell script to enable."
+	@echo "==================================================================="
+	@echo "  primetime -f run_primepower.tcl"
+	@exit 1
+
+folders:
+	mkdir -p $(REPORT_DIR)
+
+clean:
+	rm -rf $(REPORT_DIR)

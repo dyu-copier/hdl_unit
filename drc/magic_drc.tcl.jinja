@@ -1,0 +1,114 @@
+# ============================================================================
+# Magic DRC Script — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: Run Design Rule Checks on {{ip_name|capitalize}} layout using Magic
+#
+# Usage:
+#   magic -dnull -noconsole -rcfile <tech_file> < magic_drc.tcl
+#
+# Environment variables (set via Makefile or shell):
+#   GDS_FILE     — Path to input GDS (default: ../pnr/output/mk{{ip_name|capitalize}}.gds)
+#   TECH_FILE    — Magic technology file (default: sky130A.tech from PDK_ROOT)
+#   REPORTS_DIR  — Directory for output reports (default: reports)
+#
+# This script is designed for the SkyWater sky130 PDK by default.
+# Adjust the tech file and GDS path for other PDKs or technologies.
+# ============================================================================
+
+# ── Configuration ───────────────────────────────────────────────────────────
+# Resolve paths from environment or use defaults
+if {[info exists ::env(GDS_FILE)]} {
+    set gds_file $::env(GDS_FILE)
+} else {
+    set gds_file "../pnr/output/mk{{ip_name|capitalize}}.gds"
+}
+
+if {[info exists ::env(REPORTS_DIR)]} {
+    set reports_dir $::env(REPORTS_DIR)
+} else {
+    set reports_dir "reports"
+}
+
+set top_cell "mk{{ip_name|capitalize}}"
+set drc_report "${reports_dir}/magic_drc.rpt"
+
+puts "============================================================"
+puts "  {{ip_name|capitalize}} — Magic DRC"
+puts "  GDS file:    $gds_file"
+puts "  Top cell:    $top_cell"
+puts "  Report:      $drc_report"
+puts "============================================================"
+
+# ── Create output directory ─────────────────────────────────────────────────
+file mkdir $reports_dir
+
+# ── Load GDS ────────────────────────────────────────────────────────────────
+# Read the GDS file produced by place-and-route.
+# The tech file is loaded via the -rcfile flag on the command line.
+puts "\n>>> Loading GDS: $gds_file"
+gds read $gds_file
+
+# ── Select the top cell ─────────────────────────────────────────────────────
+puts ">>> Loading top cell: $top_cell"
+load $top_cell
+select top cell
+expand
+
+# ── Flatten hierarchy for DRC (optional) ────────────────────────────────────
+# Flattening can catch inter-cell violations but is slower on large designs.
+# Uncomment the next line for a flat DRC run:
+# flatten $top_cell
+# load ${top_cell}_flat
+
+# ── Run DRC ─────────────────────────────────────────────────────────────────
+puts "\n>>> Running DRC..."
+drc catchup
+drc check
+
+# ── Collect and report results ──────────────────────────────────────────────
+set drc_count [drc listall why]
+
+# Write report to file
+set rpt [open $drc_report w]
+puts $rpt "============================================================"
+puts $rpt "  Magic DRC Report — {{ip_name|capitalize}}"
+puts $rpt "  GDS:  $gds_file"
+puts $rpt "  Cell: $top_cell"
+puts $rpt "  Date: [clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}]"
+puts $rpt "============================================================"
+puts $rpt ""
+
+set total_errors 0
+if {[llength $drc_count] == 0} {
+    puts $rpt "No DRC violations found. Design is clean."
+    puts "\n>>> DRC PASSED — no violations found."
+} else {
+    foreach {rule_msg count} $drc_count {
+        puts $rpt "  $count violation(s): $rule_msg"
+        incr total_errors $count
+    }
+    puts $rpt ""
+    puts $rpt "Total DRC violations: $total_errors"
+    puts "\n>>> DRC FAILED — $total_errors total violation(s)."
+}
+
+puts $rpt ""
+puts $rpt "============================================================"
+puts $rpt "  End of report"
+puts $rpt "============================================================"
+close $rpt
+
+puts ">>> Report written to: $drc_report"
+
+# ── Summary to stdout ───────────────────────────────────────────────────────
+puts "\n============================================================"
+if {$total_errors == 0} {
+    puts "  RESULT: DRC CLEAN"
+} else {
+    puts "  RESULT: $total_errors DRC ERROR(s)"
+}
+puts "  Report: $drc_report"
+puts "============================================================"
+
+# ── Exit ────────────────────────────────────────────────────────────────────
+quit -noprompt

@@ -1,0 +1,143 @@
+# ============================================================================
+# CI Orchestration Makefile — {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+#
+# Drives the full ASIC design flow from a single entry point.
+# Each target delegates to the respective subdirectory Makefile.
+# ============================================================================
+.ONESHELL:
+SHELL=/bin/bash
+
+PROJECT_ROOT ?= $({{ip_name|capitalize}}_ROOT)
+REPORTS_DIR  ?= $(PROJECT_ROOT)/ci/reports
+SUMMARY_FILE ?= $(REPORTS_DIR)/ci_summary.txt
+TIMESTAMP    := $(shell date '+%Y-%m-%d %H:%M:%S')
+
+# ============================================================================
+#  Individual Flow Targets
+#  Each delegates to the corresponding subdirectory Makefile.
+# ============================================================================
+
+.PHONY: lint csr rtl formal test synth sta power pnr drc
+
+lint:
+	@echo "\n━━━ [CI] Lint ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/lint
+
+csr:
+	@echo "\n━━━ [CI] CSR Generation ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/systemrdl
+
+rtl:
+	@echo "\n━━━ [CI] RTL Build ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/bsv
+
+formal:
+	@echo "\n━━━ [CI] Formal Verification ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/formal
+
+test:
+	@echo "\n━━━ [CI] Simulation / Testbench ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/tb
+
+synth:
+	@echo "\n━━━ [CI] Synthesis ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/synth
+
+sta:
+	@echo "\n━━━ [CI] Static Timing Analysis ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/sta
+
+power:
+	@echo "\n━━━ [CI] Power Analysis ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/power
+
+pnr:
+	@echo "\n━━━ [CI] Place & Route ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/pnr
+
+drc:
+	@echo "\n━━━ [CI] DRC / LVS ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/drc
+
+# ============================================================================
+#  Composite CI Targets
+# ============================================================================
+
+.PHONY: ci_quick ci_full ci_report
+
+# Quick check — fast feedback for every commit
+ci_quick: lint csr rtl test
+	@echo "\n━━━ [CI] Quick checks PASSED ━━━"
+
+# Full flow — complete ASIC pipeline
+ci_full: lint csr rtl formal test synth sta power pnr drc
+	@echo "\n━━━ [CI] Full flow PASSED ━━━"
+
+# ============================================================================
+#  Report Collection
+# ============================================================================
+
+ci_report:
+	@mkdir -p $(REPORTS_DIR)
+	@echo "============================================================" > $(SUMMARY_FILE)
+	@echo "  {{ip_name|capitalize}} — CI Report Summary"                    >> $(SUMMARY_FILE)
+	@echo "  Generated: $(TIMESTAMP)"                                    >> $(SUMMARY_FILE)
+	@echo "============================================================" >> $(SUMMARY_FILE)
+	@echo ""                                                             >> $(SUMMARY_FILE)
+	@# Lint reports
+	@echo "── Lint Reports ───────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/lint/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# Synthesis reports
+	@echo "── Synthesis Reports ──────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/synth/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# STA reports
+	@echo "── STA Reports ────────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/sta/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# Power reports
+	@echo "── Power Reports ──────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/power/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# PnR reports
+	@echo "── PnR Reports ────────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/pnr/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# DRC reports
+	@echo "── DRC Reports ────────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/drc/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# Simulation / test reports
+	@echo "── Test Reports ───────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/tb/results.xml $(PROJECT_ROOT)/tb/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@# Formal reports
+	@echo "── Formal Reports ─────────────────────────────────────"         >> $(SUMMARY_FILE)
+	@for f in $(PROJECT_ROOT)/formal/reports/*; do \
+	  [ -f "$$f" ] && echo "  $$f" >> $(SUMMARY_FILE); \
+	 done; echo "" >> $(SUMMARY_FILE)
+	@echo "============================================================" >> $(SUMMARY_FILE)
+	@echo "  End of summary"                                             >> $(SUMMARY_FILE)
+	@echo "============================================================" >> $(SUMMARY_FILE)
+	@echo "[ci] Summary written to $(SUMMARY_FILE)"
+	@cat $(SUMMARY_FILE)
+
+# ============================================================================
+#  Clean
+# ============================================================================
+
+.PHONY: clean
+
+clean:
+	rm -rf $(REPORTS_DIR)
+	@echo "[ci] Clean complete."

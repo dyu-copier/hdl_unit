@@ -1,0 +1,121 @@
+# {{ ip_name | capitalize }} IP
+
+{{ ip_short_desc }}
+
+## Overview
+
+{{ ip_long_desc }}
+
+| Parameter        | Value                      |
+|------------------|----------------------------|
+| Target Process   | {{ target_process }}       |
+| Clock Frequency  | {{ clock_freq_mhz }} MHz   |
+| Bus Protocol     | {{ bus_protocol }}         |
+{%- if enable_fpga %}
+| FPGA Part        | {{ fpga_part }}            |
+{%- endif %}
+
+## Directory Structure
+
+| Directory      | Purpose                                               |
+|----------------|-------------------------------------------------------|
+| `systemrdl/`   | CSR / register map definitions (SystemRDL)            |
+| `bsv/`         | RTL source (Bluespec SystemVerilog)                   |
+| `tb/`          | Testbench & simulation (cocotb)                       |
+| `lint/`        | RTL linting (Verilator, Verible, Spyglass)            |
+| `constraints/` | SDC / XDC timing constraints                          |
+| `synth/`       | Logic synthesis (Yosys, Design Compiler, Genus)       |
+| `sta/`         | Static timing analysis (OpenSTA, PrimeTime)           |
+| `pnr/`         | Place & route (OpenROAD, ICC2, Innovus)               |
+| `power/`       | Power analysis                                        |
+| `drc/`         | DRC / LVS checks (Magic, Calibre)                    |
+| `cdc/`         | Clock domain crossing analysis                        |
+{%- if enable_formal %}
+| `formal/`      | Formal verification (SymbiYosys, JasperGold)          |
+{%- endif %}
+{%- if enable_fpga %}
+| `fpga/`        | FPGA prototyping (Vivado, Quartus)                    |
+{%- endif %}
+| `doc/`         | Documentation                                         |
+| `ci/`          | CI orchestration & GitLab CI pipeline                 |
+
+## Quick Start
+
+```bash
+# Generate CSR maps and compile RTL
+make csr rtl
+
+# Run linting
+make lint
+
+# Run tests
+make test
+
+# Full default build (csr + rtl + lint + test + synth)
+make all
+
+# CI pipelines
+make ci_quick   # lint → csr → rtl → test
+make ci_full    # lint → csr → rtl → formal → test → synth → sta → power → pnr → drc
+```
+
+## Toolchain Requirements
+
+### Open-Source
+
+| Tool           | Purpose                        |
+|----------------|--------------------------------|
+| Bluespec (bsc) | BSV → Verilog compilation      |
+| Verilator      | RTL linting & simulation       |
+| Verible        | SystemVerilog linting / format |
+| cocotb         | Python-based testbench         |
+| Yosys          | Logic synthesis                |
+| OpenSTA        | Static timing analysis         |
+| OpenROAD       | Place & route                  |
+| SymbiYosys     | Formal verification            |
+| Magic          | DRC / LVS                      |
+
+### Commercial (Optional)
+
+| Tool               | Purpose              |
+|--------------------|------------------------|
+| Synopsys DC         | Logic synthesis       |
+| Cadence Genus       | Logic synthesis       |
+| Synopsys PrimeTime  | Static timing analysis|
+| Synopsys ICC2       | Place & route         |
+| Cadence Innovus     | Place & route         |
+| Synopsys SpyGlass   | Lint / CDC            |
+| Cadence JasperGold  | Formal verification   |
+| Siemens Calibre     | DRC / LVS             |
+| Xilinx Vivado       | FPGA synthesis & PnR  |
+| Intel Quartus       | FPGA synthesis & PnR  |
+
+## Make Targets Reference
+
+| Target     | Description                                      |
+|------------|--------------------------------------------------|
+| `all`      | Default: csr rtl lint test synth                  |
+| `csr`      | Generate CSR register maps                        |
+| `rtl`      | Compile RTL (BSV → Verilog)                       |
+| `lint`     | RTL linting                                       |
+| `formal`   | Formal verification                               |
+| `test`     | Run testbench / simulation                        |
+| `synth`    | Logic synthesis                                   |
+| `sta`      | Static timing analysis                            |
+| `power`    | Power analysis                                    |
+| `pnr`      | Place & route                                     |
+| `drc`      | DRC / LVS checks                                  |
+| `fpga`     | FPGA prototyping                                  |
+| `doc`      | Generate documentation                            |
+| `ci_quick` | Quick CI: lint csr rtl test                       |
+| `ci_full`  | Full CI: lint csr rtl formal test synth sta power pnr drc |
+| `clean`    | Clean all subdirectories                          |
+| `help`     | Show available targets                            |
+
+## Author
+
+{{ author }} <{{ email }}>
+
+## License
+
+See [LICENSE](LICENSE) for details.

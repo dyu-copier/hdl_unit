@@ -1,0 +1,65 @@
+# ============================================================================
+# SDC Timing Constraints for {{ip_name}}
+# Author: {{author}} <{{email}}>
+# Description: {{ip_short_desc}}
+#
+# Target module: mk{{ip_name|capitalize}}
+# Default clock: {{clock_freq_mhz}} MHz ({{ (1000 / clock_freq_mhz) | round(3) }} ns period)
+# ============================================================================
+
+# ----------------------------------------------------------------------
+# Clock definition
+# Create clock on port CLK with 50% duty cycle
+# Target: {{clock_freq_mhz}} MHz
+# ----------------------------------------------------------------------
+{% set period_ns = (1000.0 / clock_freq_mhz) | round(3) -%}
+create_clock -name clk -period {{period_ns}} -waveform {0.0 {{ (period_ns / 2) | round(3) }}} [get_ports CLK]
+
+# ----------------------------------------------------------------------
+# Clock uncertainty
+# Accounts for jitter and skew in the clock network
+# Tighten for high-performance designs; relax for early exploration
+# ----------------------------------------------------------------------
+set_clock_uncertainty 0.1 [get_clocks clk]
+
+# ----------------------------------------------------------------------
+# Input delay constraints
+# Specifies when data arrives at input ports relative to the clock edge.
+# Set to 30% of clock period as a reasonable default.
+# Adjust per-port if specific interface timing is known.
+# ----------------------------------------------------------------------
+set_input_delay  -clock clk -max 3.0 [all_inputs]
+set_input_delay  -clock clk -min 0.5 [all_inputs]
+
+# Remove input delay from the clock port itself
+set_input_delay  -clock clk 0.0 [get_ports CLK]
+
+# ----------------------------------------------------------------------
+# Output delay constraints
+# Specifies the required data setup time at output ports relative to
+# the clock edge. Set to 30% of clock period as a reasonable default.
+# ----------------------------------------------------------------------
+set_output_delay -clock clk -max 3.0 [all_outputs]
+set_output_delay -clock clk -min 0.5 [all_outputs]
+
+# ----------------------------------------------------------------------
+# Max fanout
+# Limits the maximum fanout on any net to control load and transition.
+# Tools will insert buffers to meet this constraint.
+# ----------------------------------------------------------------------
+set_max_fanout 20 [current_design]
+
+# ----------------------------------------------------------------------
+# Max transition
+# Limits the maximum signal transition time (slew) to prevent
+# excessive delay and signal integrity issues.
+# ----------------------------------------------------------------------
+set_max_transition 0.5 [current_design]
+
+# ----------------------------------------------------------------------
+# Additional constraints
+# Add design-specific false paths, multicycle paths, and
+# case analysis below as the design matures.
+# ----------------------------------------------------------------------
+# set_false_path -from [get_clocks clk_async] -to [get_clocks clk]
+# set_multicycle_path 2 -setup -from [get_pins ...] -to [get_pins ...]
