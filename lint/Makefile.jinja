@@ -45,7 +45,7 @@ verilator: $(REPORT_DIR)
 	@echo "=== Verilator Lint: $(TOP_MODULE) ==="
 	verilator \
 		--lint-only \
-		$(shell cat $(FLAGS_FILE) 2>/dev/null) \
+		$(if $(wildcard $(FLAGS_FILE)),-f $(FLAGS_FILE)) \
 		--top-module $(TOP_MODULE) \
 		-y $(VERILOG_DIR) \
 		$(TOP_FILE) \

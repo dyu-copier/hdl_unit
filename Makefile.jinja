@@ -1,0 +1,99 @@
+# Auto-export project root so all sub-makes can find BSV/Verilog sources.
+export {{ip_name|capitalize}}_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+# PDK root: /opt/pdk in the Docker container; override for local dev.
+export PDK_ROOT ?= /opt/pdk
+
+.PHONY: all csr rtl lint formal test synth sta pnr drc power fpga doc \
+        ci_quick ci_full clean help
+
+# Default: full RTL-to-GDS flow
+all: ci_full
+
+# ── Individual targets with dependency ordering ──────────────────────────────
+
+csr:
+	$(MAKE) -C systemrdl
+
+rtl: csr
+	$(MAKE) -C bsv
+
+lint: rtl
+	$(MAKE) -C lint
+
+formal: rtl
+	$(MAKE) -C formal
+
+test: rtl
+	$(MAKE) -C tb
+
+synth: rtl
+	$(MAKE) -C synth
+
+sta: synth
+	$(MAKE) -C sta
+
+pnr: rtl
+	$(MAKE) -C pnr
+
+drc: pnr
+	$(MAKE) -C drc
+
+power: pnr test
+	$(MAKE) -C power
+
+fpga: rtl
+	$(MAKE) -C fpga
+
+doc:
+	$(MAKE) -C doc
+
+# ── Composite targets ─────────────────────────────────────────────────────────
+
+# Quick check — fast feedback for every commit
+ci_quick: lint test
+	@echo "━━━ ci_quick DONE ━━━"
+
+# Full flow — RTL through GDS with all reports
+ci_full: lint formal test synth sta pnr drc power
+	@echo "━━━ ci_full (RTL → GDS) DONE ━━━"
+
+# ── Clean ─────────────────────────────────────────────────────────────────────
+
+clean:
+	$(MAKE) -C systemrdl clean
+	$(MAKE) -C bsv clean
+	$(MAKE) -C lint clean
+	$(MAKE) -C formal clean
+	$(MAKE) -C tb clean
+	$(MAKE) -C synth clean
+	$(MAKE) -C sta clean
+	$(MAKE) -C power clean
+	$(MAKE) -C pnr clean
+	$(MAKE) -C drc clean
+	$(MAKE) -C doc clean
+{% if enable_fpga %}	$(MAKE) -C fpga clean
+{% endif %}
+# ── Help ──────────────────────────────────────────────────────────────────────
+
+help:
+	@echo "Targets for {{ip_name}} ($({{ip_name|capitalize}}_ROOT)):"
+	@echo ""
+	@echo "  make / make ci_full  — full RTL-to-GDS flow (default)"
+	@echo "  make ci_quick        — lint + simulation only (fast dev loop)"
+	@echo ""
+	@echo "  make csr             — SystemRDL → BSV/Verilog register maps"
+	@echo "  make rtl             — BSV → Verilog (runs csr first)"
+	@echo "  make lint            — Verilator + Verible lint"
+	@echo "  make formal          — SymbiYosys formal verification"
+	@echo "  make test            — cocotb simulation"
+	@echo "  make synth           — Yosys synthesis"
+	@echo "  make sta             — OpenSTA timing analysis"
+	@echo "  make pnr             — LibreLane place & route (sky130A)"
+	@echo "  make drc             — Magic DRC on PnR GDS"
+	@echo "  make power           — OpenSTA power estimation"
+{% if enable_fpga %}	@echo "  make fpga            — Vivado FPGA flow (stub)"
+{% endif %}	@echo "  make doc             — pandoc documentation"
+	@echo "  make clean           — remove all build artefacts"
+	@echo ""
+	@echo "  PDK_ROOT = $(PDK_ROOT)"

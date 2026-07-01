@@ -20,7 +20,13 @@
 if {[info exists ::env(GDS_FILE)]} {
     set gds_file $::env(GDS_FILE)
 } else {
-    set gds_file "../pnr/output/mk{{ip_name|capitalize}}.gds"
+    # LibreLane writes GDS to pnr/runs/<tag>/final/gds/; pick the latest run.
+    set candidates [lsort [glob -nocomplain "../pnr/runs/*/final/gds/mk{{ip_name|capitalize}}.gds"]]
+    if {[llength $candidates] == 0} {
+        puts "ERROR: no GDS found under ../pnr/runs/. Run 'make -C ../pnr pnr' first."
+        exit 1
+    }
+    set gds_file [lindex $candidates end]
 }
 
 if {[info exists ::env(REPORTS_DIR)]} {
@@ -74,7 +80,7 @@ puts $rpt "============================================================"
 puts $rpt "  Magic DRC Report — {{ip_name|capitalize}}"
 puts $rpt "  GDS:  $gds_file"
 puts $rpt "  Cell: $top_cell"
-puts $rpt "  Date: [clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}]"
+puts $rpt "  Date: {% raw %}[clock format [clock seconds] -format {%Y-%m-%d %H:%M:%S}]{% endraw %}"
 puts $rpt "============================================================"
 puts $rpt ""
 

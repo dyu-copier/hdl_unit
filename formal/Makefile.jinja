@@ -17,9 +17,35 @@ SHELL := /bin/bash
 # Paths & variables
 # ---------------------------------------------------------------------------
 VERILOG_DIR   := $({{ip_name|capitalize}}_ROOT)/verilog
+FORMAL_DIR    := $({{ip_name|capitalize}}_ROOT)/formal
 TOP_MODULE    := mk{{ip_name|capitalize}}
-SBY_FILE      := {{ip_name}}.sby
+TB_MODULE     := tb_mk{{ip_name|capitalize}}
+FORMAL_TB     := $(FORMAL_DIR)/{{ip_name}}_tb.sv
 REPORT_DIR    := reports
+
+# All compiled Verilog sources, excluding BRAM primitives (they use sim
+# constructs that Yosys cannot parse in synthesis/formal mode).
+VLOG_SRCS    := $(wildcard $(VERILOG_DIR)/*.v)
+BRAM_SRCS    := $(wildcard $(VERILOG_DIR)/BRAM*.v)
+VLOG_NO_BRAM := $(filter-out $(BRAM_SRCS),$(VLOG_SRCS))
+
+# ---------------------------------------------------------------------------
+# ZipCPU protocol checkers (Apache 2.0)
+# Downloaded once into formal/zipcpu_checkers/ and reused across runs.
+# ---------------------------------------------------------------------------
+CHECKER_DIR  := $(FORMAL_DIR)/zipcpu_checkers
+CHECKER_APB  := $(CHECKER_DIR)/fapb_slave.v
+CHECKER_AXI  := $(CHECKER_DIR)/faxi_master.v
+ZIPCPU_BASE  := https://raw.githubusercontent.com/ZipCPU/wb2axip/master/bench/formal
+
+$(CHECKER_DIR):
+	mkdir -p $(CHECKER_DIR)
+
+$(CHECKER_APB): | $(CHECKER_DIR)
+	wget -q -O $@ $(ZIPCPU_BASE)/fapb_slave.v
+
+$(CHECKER_AXI): | $(CHECKER_DIR)
+	wget -q -O $@ $(ZIPCPU_BASE)/faxi_master.v
 
 # ---------------------------------------------------------------------------
 # Default target
@@ -35,27 +61,77 @@ $(REPORT_DIR):
 # ---------------------------------------------------------------------------
 # SymbiYosys formal verification (open-source, default)
 #
-# Runs both 'prove' and 'cover' tasks defined in the .sby file.
-# Results are written to task-specific directories and summarised
-# in the reports folder.
+# Reads DUT Verilog + ZipCPU protocol checkers + SystemVerilog testbench.
+# The testbench (tb_mk{{ip_name|capitalize}}) wraps the DUT with:
+#   fapb_slave  — constrains APB master inputs; verifies APB slave outputs.
+#   faxi_master — constrains AXI4 slave inputs; verifies AXI4 master outputs.
+# All top-level inputs are free variables explored by smtbmc.
 # ---------------------------------------------------------------------------
 .PHONY: sby
-sby: $(REPORT_DIR)
-	@echo "=== SymbiYosys Formal: $(TOP_MODULE) ==="
-	sby -f $(SBY_FILE) 2>&1 | tee $(REPORT_DIR)/sby.log
+sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+	@echo "=== SymbiYosys Formal: $(TB_MODULE) ==="
+	@{ \
+	  printf '[tasks]\nprove\ncover\n\n'; \
+	  printf '[options]\nprove: mode bmc\nprove: depth 20\ncover: mode cover\ncover: depth 40\n\n'; \
+	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[script]\n'; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
+	  printf 'prep -top $(TB_MODULE)\n\n'; \
+	  printf '[files]\n'; \
+	  printf '%s\n' "$(CHECKER_APB)"; \
+	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
+	  printf '%s\n' "$(FORMAL_TB)"; \
+	} > $(REPORT_DIR)/$(TB_MODULE)_all.sby
+	sby -f $(REPORT_DIR)/$(TB_MODULE)_all.sby 2>&1 | tee $(REPORT_DIR)/sby.log
 	@echo "Report: $(REPORT_DIR)/sby.log"
 
-# Run only the prove task
+# Run only the prove task (used by test.sh)
 .PHONY: sby-prove
-sby-prove: $(REPORT_DIR)
-	@echo "=== SymbiYosys Prove: $(TOP_MODULE) ==="
-	sby -f $(SBY_FILE) prove 2>&1 | tee $(REPORT_DIR)/sby_prove.log
+sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+	@echo "=== SymbiYosys Prove: $(TB_MODULE) ==="
+	@{ \
+	  printf '[tasks]\nprove\n\n'; \
+	  printf '[options]\nprove: mode bmc\nprove: depth 20\n\n'; \
+	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[script]\n'; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
+	  printf 'prep -top $(TB_MODULE)\n\n'; \
+	  printf '[files]\n'; \
+	  printf '%s\n' "$(CHECKER_APB)"; \
+	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
+	  printf '%s\n' "$(FORMAL_TB)"; \
+	} > $(REPORT_DIR)/$(TB_MODULE)_prove.sby
+	sby -f $(REPORT_DIR)/$(TB_MODULE)_prove.sby prove 2>&1 | tee $(REPORT_DIR)/sby_prove.log
 
 # Run only the cover task
 .PHONY: sby-cover
-sby-cover: $(REPORT_DIR)
-	@echo "=== SymbiYosys Cover: $(TOP_MODULE) ==="
-	sby -f $(SBY_FILE) cover 2>&1 | tee $(REPORT_DIR)/sby_cover.log
+sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+	@echo "=== SymbiYosys Cover: $(TB_MODULE) ==="
+	@{ \
+	  printf '[tasks]\ncover\n\n'; \
+	  printf '[options]\ncover: mode cover\ncover: depth 40\n\n'; \
+	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[script]\n'; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
+	  printf 'prep -top $(TB_MODULE)\n\n'; \
+	  printf '[files]\n'; \
+	  printf '%s\n' "$(CHECKER_APB)"; \
+	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
+	  printf '%s\n' "$(FORMAL_TB)"; \
+	} > $(REPORT_DIR)/$(TB_MODULE)_cover.sby
+	sby -f $(REPORT_DIR)/$(TB_MODULE)_cover.sby cover 2>&1 | tee $(REPORT_DIR)/sby_cover.log
 
 # ---------------------------------------------------------------------------
 # Cadence JasperGold (commercial — stub)
@@ -77,12 +153,17 @@ clean:
 	rm -rf $(REPORT_DIR)
 	rm -rf {{ip_name}}_prove {{ip_name}}_cover
 
+.PHONY: clean-checkers
+clean-checkers:
+	rm -rf $(CHECKER_DIR)
+
 .PHONY: help
 help:
 	@echo "Formal verification targets for {{ip_name}}:"
 	@echo "  make            — run SymbiYosys prove + cover (default)"
 	@echo "  make sby        — run all SymbiYosys tasks"
-	@echo "  make sby-prove  — run prove task only"
+	@echo "  make sby-prove  — run prove task only (BMC depth 20)"
 	@echo "  make sby-cover  — run cover task only"
 	@echo "  make jasper     — JasperGold (stub)"
 	@echo "  make clean      — remove reports and work directories"
+	@echo "  make clean-checkers — remove downloaded ZipCPU checker files"

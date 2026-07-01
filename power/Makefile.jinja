@@ -2,10 +2,16 @@
 SHELL=/bin/bash
 
 TOP_MODULE = mk{{ip_name|capitalize}}
-NETLIST    = ../synth/output/$(TOP_MODULE)_synth.v
 SDC_FILE   = ../constraints/{{ip_name}}.sdc
-LIB_FILE  ?= $(PDK_ROOT)/lib/typical.lib
-ACTIVITY  ?= ../tb/$(TOP_MODULE).vcd
+LIB_FILE  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+
+# Gate-level netlist from LibreLane PnR (most accurate for power)
+NETLIST   ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
+               -path "*/final/nl/*" 2>/dev/null | sort | tail -1)
+
+# VCD from cocotb simulation (WAVES=1 in tb/Makefile)
+ACTIVITY  ?= $(shell find $({{ip_name|capitalize}}_ROOT)/tb -name "*.vcd" \
+               2>/dev/null | sort | tail -1)
 
 REPORT_DIR = reports
 
@@ -17,7 +23,8 @@ REPORT_DIR = reports
 all: power
 
 power: folders
-	sta run_power.tcl 2>&1 | tee $(REPORT_DIR)/power.log
+	NETLIST="$(NETLIST)" ACTIVITY="$(ACTIVITY)" \
+	  sta -exit run_power.tcl 2>&1 | tee $(REPORT_DIR)/power.log
 
 # ============================================================
 # PrimePower (Synopsys commercial — stub)

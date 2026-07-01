@@ -1,0 +1,62 @@
+name: {{ip_name}} CI
+
+# Tests the actual {{ip_name}} IP's RTL, RDL, and cocotb tests against the
+# pre-built rtl_unit_tools docker image. Runs `make ci_full`, which chains
+# lint -> formal -> test (cocotb) -> synth -> sta -> pnr -> drc -> power.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout {{ip_name}}
+        uses: actions/checkout@v4
+        with:
+          path: {{ip_name}}
+
+      - name: Checkout bsv_axi
+        uses: actions/checkout@v4
+        with:
+          repository: {% raw %}${{ github.repository_owner }}{% endraw %}/bsv_axi
+          path: bsv_axi
+
+      - name: Purge stale .bo files in bsv_axi (BSC version mismatch guard)
+        run: find bsv_axi -name '*.bo' -delete 2>/dev/null || true
+
+      - name: Pull rtl_unit_tools docker image
+        run: docker pull ghcr.io/dyu-copier/rtl_unit_tools:latest
+
+      - name: Run ci_full on the {{ip_name}} sources
+        run: |
+          docker run --rm \
+            -v {% raw %}${{ github.workspace }}{% endraw %}/bsv_axi:/bsv_axi:ro \
+            -v {% raw %}${{ github.workspace }}{% endraw %}/{{ip_name}}:/tmp/{{ip_name}} \
+            -e {{ip_name|capitalize}}_ROOT=/tmp/{{ip_name}} \
+            -e BSC_PATH=".:/bsv_axi/unified_axi/src/axi4:/bsv_axi/unified_axi/src/apb:/bsv_axi/unified_axi/src/common:+" \
+            -e PDK_ROOT=/opt/pdk \
+            -w /tmp/{{ip_name}} \
+            ghcr.io/dyu-copier/rtl_unit_tools:latest \
+            make ci_full
+
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: {{ip_name}}-ci-artifacts
+          path: |
+            {{ip_name}}/verilog/
+            {{ip_name}}/synth/output/
+            {{ip_name}}/synth/reports/
+            {{ip_name}}/sta/reports/
+            {{ip_name}}/power/reports/
+            {{ip_name}}/pnr/runs/
+            {{ip_name}}/drc/reports/
+            {{ip_name}}/tb/*.vcd
+            {{ip_name}}/tb/results.xml
+          if-no-files-found: ignore

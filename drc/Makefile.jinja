@@ -8,15 +8,17 @@ SHELL=/bin/bash
 
 # ── Project paths ───────────────────────────────────────────────────────────
 TOP_MODULE   ?= mk{{ip_name|capitalize}}
-GDS_DIR      ?= $({{ip_name|capitalize}}_ROOT)/pnr/output
-GDS_FILE     ?= $(GDS_DIR)/$(TOP_MODULE).gds
-VERILOG_GL   ?= $(GDS_DIR)/$(TOP_MODULE).gl.v
+# LibreLane writes GDS to pnr/runs/<tag>/final/gds/; pick the latest run.
+GDS_FILE     ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).gds" \
+                  -path "*/final/gds/*" 2>/dev/null | sort | tail -1)
+VERILOG_GL   ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
+                  -path "*/final/nl/*" 2>/dev/null | sort | tail -1)
 REPORTS_DIR  ?= reports
 
 # ── Magic settings (open-source DRC) ───────────────────────────────────────
 MAGIC        ?= magic
 MAGIC_TCL    ?= magic_drc.tcl
-TECH_FILE    ?= $(PDK_ROOT)/libs.tech/magic/sky130A.tech
+TECH_FILE    ?= $(PDK_ROOT)/sky130A/libs.tech/magic/sky130A.tech
 
 # ── Calibre settings (commercial DRC/LVS) ─────────────────────────────────
 CALIBRE_DRC  ?= calibre -drc

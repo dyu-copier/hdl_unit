@@ -1,11 +1,13 @@
 export {{ip_name|capitalize}}_ROOT=$(git rev-parse --show-toplevel)
-export BLUESPEC_HOME=/tools/bsc-2025.01
-export BSC_PATH=$BSC_PATH:/prj/bsvlib/bdir/:+
 
-# PDK root (set to your process kit installation)
-# export PDK_ROOT=/tools/pdk/{{target_process}}
+# Bluespec Compiler — match the version in rtl_unit_docker/Dockerfile
+export BLUESPEC_HOME=/tools/bsc-2026.01
+export PATH=$BLUESPEC_HOME/bin:$PATH
 
-# ASIC tool paths (uncomment and adjust as needed)
-# export YOSYS_HOME=/tools/yosys
-# export OPENROAD_HOME=/tools/openroad
-# export OPENSTA_HOME=/tools/opensta
+# PDK root — /opt/pdk inside the Docker container; adjust for local installs
+export PDK_ROOT=${PDK_ROOT:-/opt/pdk}
+
+# BSV library path: '.' = current bsv/ dir (generated CSR packages live here)
+# Add extra library directories before the '+' (BSC built-ins) as needed.
+# Example: export BSV_LIB_ROOT=/path/to/bsv_axi/unified_axi/src
+export BSC_PATH=.:${BSV_LIB_ROOT:+$BSV_LIB_ROOT/axi4:$BSV_LIB_ROOT/apb:$BSV_LIB_ROOT/common:}+

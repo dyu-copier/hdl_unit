@@ -20,8 +20,10 @@ stages:
 default:
   before_script:
     - export {{ip_name|capitalize}}_ROOT=$(pwd)
-    - export BLUESPEC_HOME=${BLUESPEC_HOME:-/tools/bsc-2025.01}
-    - export BSC_PATH=${BSC_PATH:-/prj/bsvlib/bdir/:+}
+    - export BLUESPEC_HOME=${BLUESPEC_HOME:-/tools/bsc-2026.01}
+    - export PATH=$BLUESPEC_HOME/bin:$PATH
+    - export PDK_ROOT=${PDK_ROOT:-/opt/pdk}
+    - export BSC_PATH=.:${BSV_LIB_ROOT:+$BSV_LIB_ROOT/axi4:$BSV_LIB_ROOT/apb:$BSV_LIB_ROOT/common:}+
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -139,7 +141,7 @@ sta:
 
 power:
   stage: backend
-  needs: [synthesis]
+  needs: [pnr, test]
   script:
     - make -C power
   artifacts:

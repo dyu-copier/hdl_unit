@@ -2,6 +2,18 @@ _subdirectory: .
 _exclude:
   - "{% if not enable_fpga %}fpga{% endif %}"
   - "{% if not enable_formal %}formal{% endif %}"
+  - ".venv"
+  - ".git"
+  - "uv.lock"
+  - "*.orig"
+  - "__pycache__"
+  - "*.pyc"
+  - "*.pyo"
+  - "verilog"
+  - "bo"
+  # rtl_unit's own template CI does not belong in generated IPs — they get
+  # their own workflow rendered from .github/workflows/ci.yml.jinja instead.
+  - ".github/workflows/ci.yml"
 
 #Questions
 ip_name:

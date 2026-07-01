@@ -17,7 +17,7 @@ SHELL=/bin/bash
 # ----------------------------------------------------------------------
 VERILOG_DIR   ?= $({{ip_name|capitalize}}_ROOT)/verilog
 TOP_MODULE    ?= mk{{ip_name|capitalize}}
-LIBERTY_FILE  ?= $({{ip_name|capitalize}}_ROOT)/constraints/liberty/typical.lib
+LIBERTY_FILE  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 SDC_FILE      ?= $({{ip_name|capitalize}}_ROOT)/constraints/{{ip_name}}.sdc
 
 OUTPUT_DIR    := output
@@ -50,18 +50,14 @@ dirs:
 # Yosys (open-source) synthesis flow
 # ============================================================================
 synth_yosys: dirs
-	@echo "============================================"
-	@echo " Yosys Synthesis: $(TOP_MODULE)"
-	@echo "============================================"
-	$(YOSYS) \
-	  -DVERILOG_DIR=$(VERILOG_DIR) \
-	  -DTOP_MODULE=$(TOP_MODULE) \
-	  -DLIBERTY_FILE=$(LIBERTY_FILE) \
-	  -DOUTPUT_DIR=$(OUTPUT_DIR) \
-	  -DREPORTS_DIR=$(REPORTS_DIR) \
-	  -s $(SCRIPTS_DIR)/yosys_synth.tcl
-	@echo "Synthesis complete. Netlist: $(OUTPUT_DIR)/$(TOP_MODULE)_synth.v"
-	@echo "Reports written to: $(REPORTS_DIR)/"
+	set -e; \
+	echo "============================================"; \
+	echo " Yosys Synthesis: $(TOP_MODULE)"; \
+	echo "============================================"; \
+	LIBERTY_FILE=$(LIBERTY_FILE) $(YOSYS) -c $(SCRIPTS_DIR)/yosys_synth.tcl; \
+	test -f $(OUTPUT_DIR)/$(TOP_MODULE)_synth.v; \
+	echo "Synthesis complete. Netlist: $(OUTPUT_DIR)/$(TOP_MODULE)_synth.v"; \
+	echo "Reports written to: $(REPORTS_DIR)/"
 
 # ============================================================================
 # Synopsys Design Compiler (commercial) synthesis flow

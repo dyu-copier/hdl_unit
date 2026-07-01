@@ -1,0 +1,267 @@
+// Formal verification testbench for mk{{ip_name|capitalize}}
+//
+// Protocol checkers: ZipCPU wb2axip fapb_slave + faxi_master
+// License: Apache 2.0 (commercial closed-source use permitted;
+//          retain the copyright notice in the downloaded checker files).
+//
+// Top-level inputs are free variables: sby/smtbmc explores all
+// valid combinations constrained by the protocol checkers.
+//
+//   fapb_slave  — assumes APB master stimulus follows APB protocol;
+//                 asserts DUT APB slave response is compliant.
+//   faxi_master — assumes AXI4 slave responses follow AXI4 protocol;
+//                 asserts DUT AXI4 master output is compliant.
+//
+// Author: {{author}} <{{email}}>
+`default_nettype none
+
+module tb_mk{{ip_name|capitalize}} (
+    input wire clk,
+    input wire rst_n,
+
+    // ---- APB master stimulus (free variables) ----
+    input wire        apb_PSEL,
+    input wire        apb_PENABLE,
+    input wire [31:0] apb_PADDR,
+    input wire        apb_PWRITE,
+    input wire [31:0] apb_PWDATA,
+    input wire [3:0]  apb_PSTRB,
+    input wire [2:0]  apb_PROT,
+
+    // ---- AXI4 slave responses (free variables) ----
+    input wire        axi4_awready,
+    input wire        axi4_wready,
+    input wire        axi4_bvalid,
+    input wire [1:0]  axi4_bresp,
+    input wire        axi4_arready,
+    input wire        axi4_rvalid,
+    input wire [31:0] axi4_rdata,
+    input wire        axi4_rlast,
+    input wire [1:0]  axi4_rresp
+);
+
+    // ---------------------------------------------------------------
+    // Wires for DUT AXI4 master outputs
+    // ---------------------------------------------------------------
+    wire        axi4_awvalid;
+    wire [31:0] axi4_awaddr;
+    wire [7:0]  axi4_awlen;
+    wire [2:0]  axi4_awsize;
+    wire [1:0]  axi4_awburst;
+    wire        axi4_awlock;
+    wire [3:0]  axi4_awcache;
+    wire [2:0]  axi4_awprot;
+    wire [3:0]  axi4_awqos;
+    wire [3:0]  axi4_awregion;
+
+    wire        axi4_wvalid;
+    wire [31:0] axi4_wdata;
+    wire [3:0]  axi4_wstrb;
+    wire        axi4_wlast;
+
+    wire        axi4_bready;
+
+    wire        axi4_arvalid;
+    wire [31:0] axi4_araddr;
+    wire [7:0]  axi4_arlen;
+    wire [2:0]  axi4_arsize;
+    wire [1:0]  axi4_arburst;
+    wire        axi4_arlock;
+    wire [3:0]  axi4_arcache;
+    wire [2:0]  axi4_arprot;
+    wire [3:0]  axi4_arqos;
+    wire [3:0]  axi4_arregion;
+
+    wire        axi4_rready;
+
+    // ---------------------------------------------------------------
+    // Wires for DUT APB slave outputs
+    // ---------------------------------------------------------------
+    wire        apb_PREADY;
+    wire [31:0] apb_PRDATA;
+    wire        apb_PSLVERR;
+
+    // ---------------------------------------------------------------
+    // DUT instantiation
+    //
+    // BSC compiles APB port names UPPERCASE (from port= attributes in
+    // APB_Types.bsv) and AXI4 port names lowercase (from result= in
+    // AXI4_Types.bsv).  AXI4_Master_IFC#(0,32,32,0): ID_WIDTH=0 and
+    // USER_WIDTH=0 so BSC omits awid, bid, arid, rid, *user ports.
+    // ---------------------------------------------------------------
+    mk{{ip_name|capitalize}} dut (
+        .CLK           (clk),
+        .RST_N         (rst_n),
+        // APB slave inputs
+        .apb_PSEL      (apb_PSEL),
+        .apb_PENABLE   (apb_PENABLE),
+        .apb_PADDR     (apb_PADDR),
+        .apb_PWRITE    (apb_PWRITE),
+        .apb_PWDATA    (apb_PWDATA),
+        .apb_PSTRB     (apb_PSTRB),
+        .apb_PROT      (apb_PROT),
+        // APB slave outputs
+        .apb_PREADY    (apb_PREADY),
+        .apb_PRDATA    (apb_PRDATA),
+        .apb_PSLVERR   (apb_PSLVERR),
+        // AXI4 master outputs
+        .axi4_awvalid  (axi4_awvalid),
+        .axi4_awaddr   (axi4_awaddr),
+        .axi4_awlen    (axi4_awlen),
+        .axi4_awsize   (axi4_awsize),
+        .axi4_awburst  (axi4_awburst),
+        .axi4_awlock   (axi4_awlock),
+        .axi4_awcache  (axi4_awcache),
+        .axi4_awprot   (axi4_awprot),
+        .axi4_awqos    (axi4_awqos),
+        .axi4_awregion (axi4_awregion),
+        .axi4_wvalid   (axi4_wvalid),
+        .axi4_wdata    (axi4_wdata),
+        .axi4_wstrb    (axi4_wstrb),
+        .axi4_wlast    (axi4_wlast),
+        .axi4_bready   (axi4_bready),
+        .axi4_arvalid  (axi4_arvalid),
+        .axi4_araddr   (axi4_araddr),
+        .axi4_arlen    (axi4_arlen),
+        .axi4_arsize   (axi4_arsize),
+        .axi4_arburst  (axi4_arburst),
+        .axi4_arlock   (axi4_arlock),
+        .axi4_arcache  (axi4_arcache),
+        .axi4_arprot   (axi4_arprot),
+        .axi4_arqos    (axi4_arqos),
+        .axi4_arregion (axi4_arregion),
+        .axi4_rready   (axi4_rready),
+        // AXI4 master inputs (slave responses)
+        .axi4_awready  (axi4_awready),
+        .axi4_wready   (axi4_wready),
+        .axi4_bvalid   (axi4_bvalid),
+        .axi4_bresp    (axi4_bresp),
+        .axi4_arready  (axi4_arready),
+        .axi4_rvalid   (axi4_rvalid),
+        .axi4_rdata    (axi4_rdata),
+        .axi4_rlast    (axi4_rlast),
+        .axi4_rresp    (axi4_rresp)
+    );
+
+    // ---------------------------------------------------------------
+    // Reset constraint: hold reset low for the first 4 cycles.
+    // Counter is independent of rst_n so it advances unconditionally,
+    // ensuring the constraint fires exactly at startup in both BMC and
+    // the induction base case.
+    // ---------------------------------------------------------------
+    reg [3:0] f_cycle;
+    initial   f_cycle = 4'h0;
+    always @(posedge clk)
+        if (f_cycle != 4'hf)
+            f_cycle <= f_cycle + 4'h1;
+
+    always @(*)
+        if (f_cycle < 4'h4)
+            assume(rst_n == 1'b0);
+
+    // ---------------------------------------------------------------
+    // APB slave protocol checker
+    // (ZipCPU wb2axip/bench/formal/fapb_slave.v, Apache 2.0)
+    //
+    // Note: BSC uses port name PROT; fapb_slave uses PPROT.
+    //       BSC uses port name PSTRB; fapb_slave uses PWSTRB.
+    // ---------------------------------------------------------------
+    fapb_slave #(
+        .AW           (32),
+        .DW           (32),
+        .F_OPT_SLVERR (1'b0)
+    ) u_apb_chk (
+        .PCLK    (clk),
+        .PRESETn (rst_n),
+        .PSEL    (apb_PSEL),
+        .PENABLE (apb_PENABLE),
+        .PADDR   (apb_PADDR),
+        .PWRITE  (apb_PWRITE),
+        .PWDATA  (apb_PWDATA),
+        .PWSTRB  (apb_PSTRB),
+        .PPROT   (apb_PROT),
+        .PREADY  (apb_PREADY),
+        .PRDATA  (apb_PRDATA),
+        .PSLVERR (apb_PSLVERR)
+    );
+
+    // ---------------------------------------------------------------
+    // AXI4 master protocol checker
+    // (ZipCPU wb2axip/bench/formal/faxi_master.v, Apache 2.0)
+    //
+    // C_AXI_ID_WIDTH=1: DUT has ID_WIDTH=0 (BSC omits ID ports);
+    // tie all ID inputs to 1'b0.
+    // ---------------------------------------------------------------
+    wire [3:0] f_axi_awr_nbursts;
+    wire [8:0] f_axi_wr_pending;
+    wire [3:0] f_axi_rd_nbursts;
+    wire [3:0] f_axi_rd_outstanding;
+
+    faxi_master #(
+        .C_AXI_ID_WIDTH   (1),
+        .C_AXI_DATA_WIDTH (32),
+        .C_AXI_ADDR_WIDTH (32)
+    ) u_axi_chk (
+        .i_clk             (clk),
+        .i_axi_reset_n     (rst_n),
+        // Write address channel
+        .i_axi_awvalid     (axi4_awvalid),
+        .i_axi_awready     (axi4_awready),
+        .i_axi_awid        (1'b0),
+        .i_axi_awaddr      (axi4_awaddr),
+        .i_axi_awlen       (axi4_awlen),
+        .i_axi_awsize      (axi4_awsize),
+        .i_axi_awburst     (axi4_awburst),
+        .i_axi_awlock      (axi4_awlock),
+        .i_axi_awcache     (axi4_awcache),
+        .i_axi_awprot      (axi4_awprot),
+        .i_axi_awqos       (axi4_awqos),
+        // Write data channel
+        .i_axi_wvalid      (axi4_wvalid),
+        .i_axi_wready      (axi4_wready),
+        .i_axi_wdata       (axi4_wdata),
+        .i_axi_wstrb       (axi4_wstrb),
+        .i_axi_wlast       (axi4_wlast),
+        // Write response channel
+        .i_axi_bvalid      (axi4_bvalid),
+        .i_axi_bready      (axi4_bready),
+        .i_axi_bid         (1'b0),
+        .i_axi_bresp       (axi4_bresp),
+        // Read address channel
+        .i_axi_arvalid     (axi4_arvalid),
+        .i_axi_arready     (axi4_arready),
+        .i_axi_arid        (1'b0),
+        .i_axi_araddr      (axi4_araddr),
+        .i_axi_arlen       (axi4_arlen),
+        .i_axi_arsize      (axi4_arsize),
+        .i_axi_arburst     (axi4_arburst),
+        .i_axi_arlock      (axi4_arlock),
+        .i_axi_arcache     (axi4_arcache),
+        .i_axi_arprot      (axi4_arprot),
+        .i_axi_arqos       (axi4_arqos),
+        // Read data channel
+        .i_axi_rvalid      (axi4_rvalid),
+        .i_axi_rready      (axi4_rready),
+        .i_axi_rid         (1'b0),
+        .i_axi_rdata       (axi4_rdata),
+        .i_axi_rlast       (axi4_rlast),
+        .i_axi_rresp       (axi4_rresp),
+        // Formal count outputs
+        .f_axi_awr_nbursts    (f_axi_awr_nbursts),
+        .f_axi_wr_pending     (f_axi_wr_pending),
+        .f_axi_rd_nbursts     (f_axi_rd_nbursts),
+        .f_axi_rd_outstanding (f_axi_rd_outstanding)
+    );
+
+    // ---------------------------------------------------------------
+    // Cover: reachability targets for sby cover mode
+    // ---------------------------------------------------------------
+    always @(posedge clk) begin
+        cover (apb_PREADY && !apb_PSLVERR);
+        cover (axi4_awvalid && axi4_awready);
+        cover (axi4_arvalid && axi4_arready);
+        cover (f_axi_rd_outstanding != 4'h0);
+    end
+
+endmodule
+`default_nettype wire

@@ -45,8 +45,10 @@ log "Report file : $report_file\n"
 #    typically produces one .v per module.
 # ---------------------------------------------------------------------------
 foreach vfile [glob -nocomplain $vlog_dir/*.v] {
-    log "Reading: $vfile"
-    read_verilog -sv $vfile
+    if {![string match */BRAM*.v $vfile]} {
+        log "Reading: $vfile"
+        read_verilog -sv $vfile
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -64,9 +66,6 @@ clean
 #    Map to simple D-flip-flops so clock/data pins are explicit.
 # ---------------------------------------------------------------------------
 techmap
-dfflibmap -liberty /dev/null 2>/dev/null
-# Fallback: use Yosys internal FF representation
-abc -g AND
 clean
 
 # ---------------------------------------------------------------------------

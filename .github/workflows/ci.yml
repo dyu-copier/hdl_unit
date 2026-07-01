@@ -1,0 +1,58 @@
+name: rtl_unit template CI
+
+# Replicates rtl_unit_docker/test.sh: builds the docker image, generates a
+# fresh IP with copier, and runs the 21 template-scaffolding tests inside
+# the container. Fails if any of the 21 tests fails.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rtl_unit (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: rtl_unit
+
+      - name: Checkout rtl_unit_docker
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/rtl_unit_docker
+          path: rtl_unit_docker
+
+      - name: Checkout bsv_axi
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/bsv_axi
+          path: bsv_axi
+
+      - name: Purge stale .bo files in bsv_axi (BSC version mismatch guard)
+        run: find bsv_axi -name '*.bo' -delete 2>/dev/null || true
+
+      - name: Run test.sh (docker build + 21 tests via copier + tools)
+        run: bash rtl_unit_docker/test.sh 2>&1 | tee err.log
+
+      - name: Show compact test summary
+        if: always()
+        run: cat rtl_unit_docker/test_summary.txt 2>/dev/null || echo "(no summary written)"
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rtl_unit-test-artifacts
+          path: |
+            err.log
+            rtl_unit_docker/test_summary.txt
+            rtl_unit_docker/myip/tb/results.xml
+            rtl_unit_docker/myip/tb/*.vcd
+            rtl_unit_docker/myip/verilog/
+            rtl_unit_docker/myip/synth/output/
+            rtl_unit_docker/myip/pnr/runs/
+          if-no-files-found: ignore

@@ -13,12 +13,18 @@ folders:
 	mkdir -p $(BO_DIR)
 	mkdir -p $({{ip_name|capitalize}}_ROOT)/verilog/
 
-build_bsv: copy_files 
-	bsc $(build_opts)   {{ip_name}}.bsv
-	grep dumpfile $(TOP_FILE) || perl -pi -e 's/endmodule/initial begin \n \$$dumpfile\("decode.vcd"\);\$$dumpvars;\n end \n endmodule/' $(TOP_FILE)
+build_bsv: copy_files
+	set -e; $(BLUESPEC_HOME)/bin/bsc $(build_opts) {{ip_name}}.bsv
+	grep -q dumpfile $(TOP_FILE) || sed -i 's/endmodule/initial begin\n  $$dumpfile("decode.vcd");\n  $$dumpvars;\nend\nendmodule/' $(TOP_FILE)
 
 copy_files:
-	cp -p  $(BLUESPEC_HOME)/lib/Verilog/FIFO2.v     $({{ip_name|capitalize}}_ROOT)/verilog/
-	cp -p  $(BLUESPEC_HOME)/lib/Verilog/SizedFIFO.v $({{ip_name|capitalize}}_ROOT)/verilog/
-	cp -p  $(BLUESPEC_HOME)/lib/Verilog/BRAM*.v     $({{ip_name|capitalize}}_ROOT)/verilog/
-	cp -p  $(BLUESPEC_HOME)/lib/Verilog/FIFO1*.v    $({{ip_name|capitalize}}_ROOT)/verilog/
+	bsc_v="$(BLUESPEC_HOME)/lib/Verilog"; \
+	if [ -d "$$bsc_v" ]; then \
+	    cp -p "$$bsc_v"/FIFO*.v     "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
+	    cp -p "$$bsc_v"/FIFOL*.v    "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
+	    cp -p "$$bsc_v"/SizedFIFO.v "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
+	    cp -p "$$bsc_v"/BRAM*.v     "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
+	    echo "BSC Verilog models copied from $$bsc_v"; \
+	else \
+	    echo "Warning: no lib/Verilog dir found under $(BLUESPEC_HOME)"; \
+	fi

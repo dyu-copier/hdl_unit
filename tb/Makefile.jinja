@@ -1,19 +1,38 @@
-tst=default
-TOPLEVEL=mk{{ip_name|capitalize}}
-MODULE=test_$(tst)
-SIM_BUILD = ${tst}_build
+tst      = default
+TOPLEVEL = mk{{ip_name|capitalize}}
+MODULE   = test_$(tst)
+SIM_BUILD = $(tst)_build
+
 ifeq ($(tst), default)
-	VERILOG_DIR=$({{ip_name|capitalize}}_ROOT)/verilog
-	VERILOG_SOURCES +=$(VERILOG_DIR)/$(TOPLEVEL).v
+	VERILOG_DIR = $({{ip_name|capitalize}}_ROOT)/verilog
+	VERILOG_SOURCES += $(filter-out $(wildcard $(VERILOG_DIR)/BRAM*.v),$(wildcard $(VERILOG_DIR)/*.v))
 else
-	VERILOG_DIR=$({{ip_name}}_ROOT)/someother_verilog
-	VERILOG_SOURCES +=$(VERILOG_DIR)/design/$(TOPLEVEL).v
+	VERILOG_DIR = $({{ip_name|capitalize}}_ROOT)/someother_verilog
+	VERILOG_SOURCES += $(VERILOG_DIR)/design/$(TOPLEVEL).v
 endif
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
+WAVES ?= 1
+
+# RAL model generated from SystemRDL; required by test_default.py
+RDL_SRC := $({{ip_name|capitalize}}_ROOT)/systemrdl/{{ip_name}}.rdl
+RAL_PY  := $({{ip_name|capitalize}}_ROOT)/tb/{{ip_name|capitalize}}_Reg_RAL.py
+
+$(RAL_PY): $(RDL_SRC)
+	peakrdl cocotb_ralgen $< -o $(dir $@)
+
 include $(shell cocotb-config --makefiles)/Makefile.sim
-stem: 
-	echo $(tst)
-	verilator -Wno-fatal -y $(BSV_LIBRARY) -I../bsv -xml-only --bbox-sys $(VERILOG_SOURCES)
-	java -jar /tools/saxon/saxon-he-10.5.jar -xsl:stems.xsl obj_dir/Vcl_id_defines.xml>top.stem
+
+# Ensure RAL is generated before the simulation target
+sim: $(RAL_PY)
+
+# Cocotb's Makefile.sim defines `all: sim`. Force it to be the default goal —
+# otherwise the first target with a recipe in this file ($(RAL_PY)) wins and
+# `make` would only regenerate the RAL model without ever running the sim
+# (leaving no decode.vcd, which power/ needs).
+.DEFAULT_GOAL := all
+
+.PHONY: stem
+stem:
+	@echo $(tst)

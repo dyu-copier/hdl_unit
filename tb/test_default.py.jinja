@@ -1,0 +1,88 @@
+"""Default cocotb testbench for {{ip_name}}.
+
+Connects:
+  - ApbMaster  (cocotbext-apb) to the DUT's APB slave CSR port
+  - AxiRam     (cocotbext-axi) to the DUT's AXI4 master port
+  - RAL model  (peakrdl-cocotb-ralgen) for structured register access
+
+Tests:
+  test_ral_reset     — all registers read back their defined reset values
+  test_ral_fgwr_fgrd — foreground APB write + foreground APB read on all
+                       writable registers
+"""
+import cocotb
+from cocotb.clock import Clock
+from cocotb.triggers import ClockCycles
+from cocotbext.apb import ApbBus, ApbMaster
+from cocotbext.axi import AxiBus, AxiRam
+from peakrdl_cocotb_ralgen.callbacks.bsv import BSVCallback
+from peakrdl_cocotb_ralgen.testcases import reset_test, rw_test
+from {{ip_name|capitalize}}_Reg_RAL import {{ip_name|capitalize}}_Reg_RAL_Test as RAL
+
+
+class BSVCallbackForPeakrdlBsv(BSVCallback):
+    """Correct sig() for the peakrdl-bsv naming convention.
+
+    Stock BSVCallback constructs `s<reg><field>` on `dut`, but peakrdl-bsv's
+    Verilog output puts `<reg_instance>_s<field>__read` on the register-block
+    submodule (`dut.csr`), with a `__` (double underscore) separator before
+    the access-mode suffix. Reach through `dut.csr.<name>` to get the field
+    signal handle.
+    """
+
+    def sig(self, sigHash):
+        reg = sigHash["path"][-2].lower()
+        field = sigHash["path"][-1]
+        name = f"{reg}_s{field}__read"
+        return getattr(self.dut.csr, name, None)
+
+
+class ApbCfgIfc:
+    """Adapts ApbMaster to the read/write interface expected by the RAL."""
+
+    def __init__(self, apb: ApbMaster) -> None:
+        self._apb = apb
+
+    async def read(self, addr: int, width: int, accesswidth: int) -> int:
+        data = await self._apb.read(addr)
+        return int.from_bytes(data, "little") if isinstance(data, (bytes, bytearray)) else int(data)
+
+    async def write(self, addr: int, width: int, accesswidth: int, data: int) -> None:
+        await self._apb.write(addr, data.to_bytes(accesswidth // 8, "little"))
+
+
+async def _setup(dut):
+    """Shared clock/reset setup; returns (cfg, callback)."""
+    cocotb.start_soon(Clock(dut.CLK, 10, units="ns").start())
+
+    # AXI4 RAM slave — responds to any DUT-initiated AXI4 master transactions.
+    AxiRam(AxiBus.from_prefix(dut, "axi4"), dut.CLK, dut.RST_N,
+           reset_active_level=False, size=2**16)
+
+    dut.RST_N.value = 0
+    await ClockCycles(dut.CLK, 4)
+    dut.RST_N.value = 1
+    await ClockCycles(dut.CLK, 4)
+
+    apb = ApbMaster(ApbBus.from_prefix(dut, "apb"), dut.CLK)
+    return ApbCfgIfc(apb), BSVCallbackForPeakrdlBsv(dut)
+
+
+@cocotb.test()
+async def test_ral_reset(dut):
+    """All registers must read back their defined reset values."""
+    cfg, callback = await _setup(dut)
+    ral = RAL(cfg, callback=callback)
+    # reset_test.reset_test is a plain sync function (reads signal values via
+    # the callback) — do NOT `await` it. rw_test.rw_test below IS async
+    # because it performs APB transfers, so it is awaited.
+    reset_test.reset_test(ral, verbose=True)
+
+
+@cocotb.test()
+async def test_ral_fgwr_fgrd(dut):
+    """Foreground APB write then foreground APB read on all writable registers."""
+    cfg, _ = await _setup(dut)
+    ral = RAL(cfg)
+    await rw_test.rw_test(ral, foreground_read=True, foreground_write=True,
+                          count=1, verbose=True)

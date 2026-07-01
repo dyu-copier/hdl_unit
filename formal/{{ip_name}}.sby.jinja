@@ -75,19 +75,16 @@ smtbmc
 #   read_verilog -sv -I<path> -D<DEFINE>=<value> ...
 # ---------------------------------------------------------------------------
 [script]
-read_verilog -sv {{ip_name}}.v
+read_verilog -sv mk{{ip_name|capitalize}}.v
 prep -top mk{{ip_name|capitalize}}
 
 # ---------------------------------------------------------------------------
 # [files]  —  Source files to copy into the work directory
 #
-# SymbiYosys copies these files into a temporary work directory before
-# running the script above.  Paths are relative to the .sby file location.
-# Use $({{ip_name|capitalize}}_ROOT) in the Makefile to construct the path;
-# here we reference the verilog directory directly.
-#
-# Add additional files (e.g. helper modules, BSV library primitives)
-# on separate lines as needed.
+# The Makefile rewrites this section at run time to include all compiled
+# Verilog files (BSC primitives, CSR module, top module).  The entry below
+# is a fallback for manual sby invocations; when using 'make sby-prove' the
+# full file list is generated automatically.
 # ---------------------------------------------------------------------------
 [files]
 ../verilog/mk{{ip_name|capitalize}}.v

@@ -4,7 +4,7 @@ SHELL=/bin/bash
 TOP_MODULE = mk{{ip_name|capitalize}}
 NETLIST  = ../synth/output/$(TOP_MODULE)_synth.v
 SDC_FILE = ../constraints/{{ip_name}}.sdc
-LIB_FILE ?= $(PDK_ROOT)/lib/typical.lib
+LIB_FILE ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
 
 REPORT_DIR = reports
 
@@ -16,7 +16,7 @@ REPORT_DIR = reports
 all: sta
 
 sta: folders
-	sta run_sta.tcl
+	sta -exit run_sta.tcl
 
 setup: folders
 	sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/setup_summary.rpt
