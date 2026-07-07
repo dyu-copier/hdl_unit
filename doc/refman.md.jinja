@@ -1,0 +1,287 @@
+# {{ip_name}} Datasheet — Template & Section Notes
+
+This template is synthesized from datasheet/product-brief structures used across the
+IP industry. Not every IP needs every section — pick the subset appropriate to your IP
+type (soft RTL core vs. hard macro/PHY vs. processor IP vs. verification IP) using the
+guidance in each section below.
+
+---
+
+## 0. Header / Cover Block
+
+**What goes here:**
+- IP name and version (e.g., "PHY IP for TSMC 16nm")
+- Vendor name/logo
+- Document type label (e.g., "DATASHEET," "PRODUCT BRIEF," "IP DELIVERABLES GUIDE")
+- Document revision number and date
+- One-line tagline describing the IP's core value proposition
+
+**Notes:**
+- Some vendor briefs are short (2-4 pages) and lead with a tagline + hero benefit statement.
+- Some full datasheets are longer engineering documents and lead straight into a numbered
+  table of contents — useful if the datasheet covers multiple related IP blocks (e.g., Controller +
+  PHY + Device Controller variants all in one document).
+- If the IP has multiple delivery forms (soft RTL vs. hardened GDSII), state which variant this
+  specific datasheet/revision describes, since deliverables and specs differ by variant.
+
+---
+
+## 1. Overview / Description
+
+**What goes here:**
+- 1-3 paragraphs stating: what standard/protocol the IP implements, what problem it solves,
+  and why a design team would choose it over alternatives.
+- Compliance statement — which spec version/revision it conforms to (e.g., "JEDEC UFS,
+  UFSHCI standards," "IEEE 802.3 Clause 49," "PCIe 6.0 specification").
+- Delivery form stated up front if relevant (soft macro / hard macro / subsystem).
+
+**Notes:**
+- Every vendor researched leads with this. It's the "elevator pitch" section.
+- Some datasheets fold in a short market-context sentence (e.g., GDDR6 use in
+  AI/data center vs. legacy GPU-only use) — useful when the IP serves an evolving market.
+- State backward compatibility here if relevant (e.g., "backward compatible to PCIe 5.0, 4.0, 3.1").
+
+---
+
+## 2. Key Features
+
+**What goes here:**
+- Bulleted list of concrete, verifiable technical capabilities — not marketing claims.
+- Include: supported speeds/data rates, supported modes, configurability ranges (e.g.,
+  "4-bit, 8-bit, and 16-bit wide SDRAM support"), compliance sub-features (e.g., equalization
+  schemes, low-power modes), and any optional/parameterized extensions.
+- Group related bullets under sub-headers if the list is long (some vendors do this for protocol
+  version support, lane/width configurability, and RAS/reliability features separately).
+
+**Notes:**
+- This is the most universal section — every vendor has it, though naming varies
+  ("Features," "Key Features," "Specifications").
+- Keep each bullet to one capability; avoid compound bullets that bury a spec inside prose.
+- Distinguish **mandatory** features from **optional/licensable** features (some TRMs are
+  explicit about this distinction — e.g., trace/debug is separately licensed).
+
+---
+
+## 3. Benefits *(optional)*
+
+**What goes here:**
+- A short, separate list answering "why does this matter to the customer," distinct from
+  the literal feature list. Examples: "ease of use — customizable with easy integration,"
+  "designed by an industry leader — active contributor to the relevant standards body."
+
+**Notes:**
+- Only some vendors consistently separate this from Features; others fold
+  benefit-style language into the overview or feature bullets instead.
+- Useful when the target reader is a decision-maker/architect rather than an implementer —
+  benefits answer "why this vendor," features answer "does it do X."
+
+---
+
+## 4. Target Applications / Use Cases
+
+**What goes here:**
+- Named end markets or system types the IP is designed for (e.g., "data centers," "automotive
+  ADAS," "AI/ML accelerators," "IoT sensor hubs," "networking/storage").
+- Optionally tie each application to the specific feature that makes it a fit (e.g., low-latency
+  mode → HPC; low-power mode → wearables).
+
+**Notes:**
+- Present in many datasheets; less emphasized in more engineering-first datasheets and
+  spec-table-first product briefs.
+- Keep to a short list (4-6 items) — this section orients the reader, it isn't the sales pitch.
+
+---
+
+## 5. Block Diagram(s)
+
+**What goes here:**
+- **System-level diagram**: shows the IP as a black box within a larger SoC context (what it
+  connects to — memory controller, SerDes, bus fabric, other IP).
+- **IP-level (internal) diagram**: shows the sub-blocks inside the IP itself (e.g., TX path, RX
+  path, control logic, calibration engine).
+
+**Notes:**
+- Some datasheets explicitly provide *both* diagrams as separate figures ("Figure 1: system-level,"
+  "Figure 2: IP-level") — this is good practice to copy since it serves two different readers
+  (system architect vs. integration engineer).
+- Some datasheets call the internal diagram the "Functional Block Diagram" and always follow it with
+  prose ("Functional Block Diagram Description") that walks through each labeled sub-block.
+- **Diagramming tools** (via `pandoc-ext/diagram`): GraphViz (`.dot`) for system-level/internal
+  block diagrams · Mermaid (`.mermaid`) for FSM state diagrams and Gantt charts · PlantUML
+  (`.plantuml`) for sequence diagrams and timing/waveform diagrams.
+
+---
+
+## 6. Architecture / Functional Description
+
+**What goes here:**
+- Prose walkthrough of how the IP works internally, referencing the block diagram's labeled
+  sub-blocks one at a time.
+- Data flow description (e.g., how a transaction moves from bus interface → internal FIFO →
+  physical I/O).
+- Key algorithms or state machines worth calling out (e.g., training/calibration sequences,
+  encoding/decoding, arbitration schemes).
+
+**Notes:**
+- This is where some datasheets go deepest — each sub-block from the diagram gets its
+  own short paragraph.
+- For PHY/analog IP, this section should describe calibration, training, and equalization
+  mechanisms since these are often the differentiating engineering content.
+- For processor IP, this content instead lives in the Technical Reference Manual,
+  not the product brief — see Section 13 below on document-suite structuring.
+
+---
+
+## 7. Interfaces / Signals / Pinout
+
+**What goes here:**
+- Every external interface the IP exposes, grouped logically (e.g., "SD Interface," "AHB Slave
+  Interface," "AHB Master Interface," "System Interface," "DFI interface to memory controller").
+- Signal-level detail: signal name, direction, width, active-high/low, description.
+- For PHY IP: DC characteristics, driver strength options, I/O standards supported.
+
+**Notes:**
+- The best structure to follow here is breaking signals out **by interface group**,
+  not as one flat table, especially when the IP has 3+ distinct interface types.
+- Note protocol version of each interface explicitly (e.g., "DFI 4.0-compliant controller
+  interface") since compatibility questions are common in integration.
+- If the IP supports multiple bus-width or protocol-width configurations (e.g., 32/64/128-bit
+  AXI), state which interfaces scale with that parameter.
+
+---
+
+## 8. Specifications Table *(for highly parameterized/configurable IP)*
+
+**What goes here:**
+- A literal table (not prose bullets) listing each configurable parameter and its range or
+  option set: e.g., ISA extensions supported, cache size range, max interrupt count, optional
+  coprocessor interfaces, certification status, available reference/example systems.
+
+**Notes:**
+- Best suited to IP with many build-time configuration options (processors, highly
+  parameterized controllers) where a reader needs to quickly scan "what can be turned on/off."
+- Mark each row as **Fixed**, **Configurable** (settable via RTL/build parameter), or
+  **Optional** (separately licensed/priced) — some TRMs use exactly this three-way distinction
+  and it removes a lot of sales/integration ambiguity.
+
+---
+
+## 9. Verification Environment
+
+**What goes here:**
+- What testbench/verification methodology is provided or was used to validate the IP
+  (e.g., UVM environment, protocol-specific VIP, compliance test suites).
+- Coverage information: functional coverage bins, confidence tests, corner-case scenarios.
+- Silicon-proven status — number of tape-outs, foundries/process nodes validated on.
+
+**Notes:**
+- Some vendors break this out as its own numbered section separate from Deliverables
+  ("Verification Environment" vs. "IP Deliverables") — worth doing even though the testbench
+  itself is technically also a deliverable, because it answers a different buyer question
+  ("has this been proven?" vs. "what do I receive?").
+- State language/format explicitly (e.g., "delivered in SystemVerilog source code," "customer
+  can extend the environment with application-specific tests").
+
+---
+
+## 10. Deliverables
+
+**What goes here — this is the most consistently detailed section across every vendor, be exhaustive:**
+- **RTL/soft IP path:** synthesizable RTL/Verilog source, synthesis scripts and timing
+  constraints (SDC), lint/CDC/RDC check results, sample simulation scripts.
+- **Hard macro/PHY path:** GDSII, LEF abstracts, LVS netlists, `.lib`/`.db` timing models,
+  Verilog behavioral model, IBIS/HSPICE I/O models, CDL netlists, SDF for back-annotated
+  timing, DRC/LVS reports.
+- **Documentation set:** integration guide, user guide, quick-start guide, release notes,
+  data book, implementation/physical-design checklist, application notes.
+- **Test/verification artifacts:** sample UVM/SystemVerilog testbench with confidence tests,
+  verification IP setup files, test and characterization user guide.
+- **Firmware (if applicable):** binary firmware image(s) for on-chip training/calibration
+  processors, host application library, configuration tools.
+- **Functional Safety package (if automotive-grade):** safety manual, FMEDA report,
+  description of implemented safety mechanisms.
+
+**Notes:**
+- Split this section explicitly **by delivery variant** if the IP is offered as both RTL and
+  hardened forms (some vendors do this) — the deliverable lists differ substantially.
+- Be literal and itemized (file types, formats) rather than vague ("full documentation") —
+  thorough datasheets itemize exact artifact types because this list is often referenced
+  contractually during IP licensing.
+
+---
+
+## 11. Related Products
+
+**What goes here:**
+- Companion IP designed to pair with this core (e.g., matching PHY for a controller, matching
+  Verification IP for a protocol, matching memory/protocol controller for a PHY).
+
+**Notes:**
+- Some datasheets include this explicitly; it's a low-effort, high-value section since it
+  answers "what else do I need to buy" without the reader having to search the catalog.
+
+---
+
+## 12. Services *(optional)*
+
+**What goes here:**
+- Paid engineering services available alongside the IP license: customization, SoC
+  integration support, foundry/process porting, maintenance/update subscriptions.
+
+**Notes:**
+- Worth including as its own section (rather than burying it in deliverables) when
+  integration services are offered as a distinct commercial line item — it sets buyer
+  expectations about what's included in the base license vs. purchased separately.
+
+---
+
+## 13. Document Suite Notes *(for processor/architecture IP)*
+
+**What goes here (as a pointer section, not full content):**
+- If the "datasheet" is really an entry point to a larger, independently-versioned document
+  set, list and link those documents here instead of duplicating their content:
+  - **Technical Reference Manual (TRM)** — register-level detail, memory system, interrupts,
+    debug features.
+  - **Configuration & Integration Manual** — build-time parameters, integration constraints.
+  - **Devices Generic User Guide** — implementation/integration guidance for silicon partners.
+  - **Errata Notice** — living document of known issues, affected configurations, workarounds.
+
+**Notes:**
+- Use this model when the IP has a long support lifecycle with independently-updated
+  sub-documents (typical of licensed processor architectures) rather than a single static
+  datasheet PDF that gets fully reissued each revision.
+
+---
+
+## 14. Revision History
+
+**What goes here:**
+- Table: revision number, date, summary of changes.
+
+**Notes:**
+- Standard practice; keep at the end of the document (or immediately after the cover block
+  for very long documents, per some vendors' TOC-first convention).
+
+---
+
+## 15. "About [Vendor]" Boilerplate
+
+**What goes here:**
+- Standard corporate description paragraph, portfolio summary, trademark/legal notices,
+  contact/"for more information" link.
+
+**Notes:**
+- Universally present as the closing section across every vendor researched — keep it short
+  and consistent across all of your datasheets (it's typically reused verbatim).
+
+---
+
+## Quick-reference: which sections to include by IP type
+
+| IP type | Must-have sections | Often-skipped sections |
+|---|---|---|
+| Soft RTL controller (e.g., I2C, SPI, UART) | 1, 2, 5, 6, 7, 9, 10, 15 | 8, 12, 13 |
+| Hard macro / PHY (e.g., DDR PHY, SerDes) | 1, 2, 5, 6, 7, 9, 10 (hard-macro variant), 11 | 3, 8 |
+| Processor / core IP (e.g., CPU, DSP) | 1, 2, 8, 10, 13, 15 | 6 (moves to TRM), 4 |
+| Protocol controller (e.g., PCIe, USB, UFS) | 1, 2, 4, 5, 6, 7, 9, 10, 11 | 3, 12 |
+| Verification IP | 1, 2, 9, 10, 11 | 5 (internal diagram), 8 |
