@@ -1,7 +1,9 @@
-export {{ip_name|capitalize}}_ROOT=$(git rev-parse --show-toplevel)
+export {{ip_name|upper}}_ROOT=$(git rev-parse --show-toplevel)
 
-# Bluespec Compiler — match the version in rtl_unit_docker/Dockerfile
-export BLUESPEC_HOME=/tools/bsc-2026.01
+# Bluespec Compiler — match the version in rtl_unit_docker/Dockerfile.
+# Respect a pre-set BLUESPEC_HOME from the environment; fall back to the
+# Docker-image install path.
+export BLUESPEC_HOME=${BLUESPEC_HOME:-/tools/bsc-2026.01}
 export PATH=$BLUESPEC_HOME/bin:$PATH
 
 # PDK root — /opt/pdk inside the Docker container; adjust for local installs
@@ -9,5 +11,5 @@ export PDK_ROOT=${PDK_ROOT:-/opt/pdk}
 
 # BSV library path: '.' = current bsv/ dir (generated CSR packages live here)
 # Add extra library directories before the '+' (BSC built-ins) as needed.
-# Example: export BSV_LIB_ROOT=/path/to/bsv_axi/unified_axi/src
+# Example: export BSV_LIB_ROOT=/path/to/bsv_axi/src
 export BSC_PATH=.:${BSV_LIB_ROOT:+$BSV_LIB_ROOT/axi4:$BSV_LIB_ROOT/apb:$BSV_LIB_ROOT/common:}+

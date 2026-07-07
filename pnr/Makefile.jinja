@@ -1,5 +1,16 @@
+# ============================================================================
+# PnR Makefile — {{ip_name}}
+#   make pnr          — LibreLane RTL→GDS flow (default; includes synthesis,
+#                       writes GDS + gate netlist under runs/<tag>/final/)
+#   make pnr_openroad — bare OpenROAD reference flow on the synth/ netlist
+#   make gds          — Magic DEF→GDS for the bare-OpenROAD output
+#                       (LibreLane writes its own GDS; drc/ picks that up)
+#
+# PDK-specific cell/layer names for the bare flow live in pnr/pdk_config.tcl.
+# ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 TOP_MODULE  = mk{{ip_name|capitalize}}
 PDK_ROOT   ?= /opt/pdk
@@ -17,19 +28,52 @@ REPORT_DIR  = reports
 all: pnr
 
 pnr: config.json
-	librelane --pdk-root $(PDK_ROOT) config.json
+	librelane --pdk-root $(PDK_ROOT) config.json 2>&1 | tee librelane.log
 
 # ============================================================
 # Bare OpenROAD flow (reference / advanced use)
 # Requires a pre-synthesized netlist from synth/output/.
 # ============================================================
-.PHONY: pnr_openroad
+.PHONY: pnr_openroad check_netlist
 
 NETLIST    = ../synth/output/$(TOP_MODULE)_synth.v
 SDC_FILE   = ../constraints/{{ip_name}}.sdc
+{% if lef_file -%}
+TECH_LEF  ?= {{lef_file}}
+{%- else -%}
+TECH_LEF  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/techlef/sky130_fd_sc_hd__nom.tlef
+{%- endif %}
+MACRO_LEF ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lef/sky130_fd_sc_hd.lef
+{% if liberty_file -%}
+LIB_FILE  ?= {{liberty_file}}
+{%- else -%}
+LIB_FILE  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+{%- endif %}
 
-pnr_openroad: folders
-	openroad openroad_flow.tcl 2>&1 | tee $(REPORT_DIR)/openroad.log
+export TOP_MODULE NETLIST SDC_FILE TECH_LEF MACRO_LEF LIB_FILE OUTPUT_DIR REPORT_DIR
+
+check_netlist:
+	@test -f $(NETLIST) || { echo "ERROR: $(NETLIST) not found — run 'make -C ../synth' first."; exit 1; }
+
+pnr_openroad: folders check_netlist
+	openroad -exit openroad_flow.tcl 2>&1 | tee $(REPORT_DIR)/openroad.log
+
+# DEF → GDS via Magic for the bare-OpenROAD output (LibreLane's own GDS is
+# under runs/<tag>/final/gds/ and is what drc/ consumes by default).
+MAGIC      ?= magic
+MAGIC_TECH ?= $(PDK_ROOT)/sky130A/libs.tech/magic/sky130A.tech
+
+.PHONY: gds
+gds:
+	@test -f $(OUTPUT_DIR)/$(TOP_MODULE)_final.def || { echo "ERROR: $(OUTPUT_DIR)/$(TOP_MODULE)_final.def not found — run 'make pnr_openroad' first."; exit 1; }
+	GDS_TOP=$(TOP_MODULE) \
+	GDS_DEF=$(OUTPUT_DIR)/$(TOP_MODULE)_final.def \
+	GDS_LEF="$(TECH_LEF) $(MACRO_LEF)" \
+	GDS_OUT=$(OUTPUT_DIR)/$(TOP_MODULE).gds \
+	$(MAGIC) -dnull -noconsole -T $(MAGIC_TECH) def2gds.tcl \
+	  2>&1 | tee $(REPORT_DIR)/def2gds.log
+	@test -f $(OUTPUT_DIR)/$(TOP_MODULE).gds || { echo "ERROR: GDS not written"; exit 1; }
+	@echo "GDS written: $(OUTPUT_DIR)/$(TOP_MODULE).gds"
 
 # ============================================================
 # Synopsys ICC2 (commercial — stub)
@@ -54,4 +98,4 @@ folders:
 
 .PHONY: clean
 clean:
-	rm -rf $(OUTPUT_DIR) $(REPORT_DIR) runs
+	rm -rf $(OUTPUT_DIR) $(REPORT_DIR) runs librelane.log

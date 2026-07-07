@@ -1,16 +1,21 @@
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 TOP_MODULE = mk{{ip_name|capitalize}}
 SDC_FILE   = ../constraints/{{ip_name}}.sdc
+{% if liberty_file -%}
+LIB_FILE  ?= {{liberty_file}}
+{%- else -%}
 LIB_FILE  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+{%- endif %}
 
 # Gate-level netlist from LibreLane PnR (most accurate for power)
-NETLIST   ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
+NETLIST   ?= $(shell find $({{ip_name|upper}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
                -path "*/final/nl/*" 2>/dev/null | sort | tail -1)
 
 # VCD from cocotb simulation (WAVES=1 in tb/Makefile)
-ACTIVITY  ?= $(shell find $({{ip_name|capitalize}}_ROOT)/tb -name "*.vcd" \
+ACTIVITY  ?= $(shell find $({{ip_name|upper}}_ROOT)/tb -name "*.vcd" \
                2>/dev/null | sort | tail -1)
 
 REPORT_DIR = reports
@@ -18,12 +23,16 @@ REPORT_DIR = reports
 # ============================================================
 # OpenSTA power estimation (open-source, default)
 # ============================================================
-.PHONY: power clean all
+.PHONY: power clean all check_inputs
 
 all: power
 
-power: folders
-	NETLIST="$(NETLIST)" ACTIVITY="$(ACTIVITY)" \
+check_inputs:
+	@test -n "$(NETLIST)" -a -f "$(NETLIST)" || { echo "ERROR: no gate-level netlist found under pnr/runs — run 'make -C ../pnr' first."; exit 1; }
+	@test -n "$(ACTIVITY)" -a -f "$(ACTIVITY)" || { echo "ERROR: no VCD found under tb/ — run 'make -C ../tb' first."; exit 1; }
+
+power: folders check_inputs
+	NETLIST="$(NETLIST)" ACTIVITY="$(ACTIVITY)" LIB_FILE="$(LIB_FILE)" \
 	  sta -exit run_power.tcl 2>&1 | tee $(REPORT_DIR)/power.log
 
 # ============================================================

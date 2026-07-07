@@ -3,20 +3,14 @@
 # Author: {{author}} <{{email}}>
 # Description: Run Design Rule Checks on {{ip_name|capitalize}} layout using Magic
 #
-# Usage:
-#   magic -dnull -noconsole -rcfile <tech_file> < magic_drc.tcl
+# Usage (via drc/Makefile):
+#   GDS_FILE=<gds> REPORTS_DIR=<dir> magic -dnull -noconsole -T <techfile> magic_drc.tcl
 #
-# Environment variables (set via Makefile or shell):
-#   GDS_FILE     — Path to input GDS (default: ../pnr/output/mk{{ip_name|capitalize}}.gds)
-#   TECH_FILE    — Magic technology file (default: sky130A.tech from PDK_ROOT)
-#   REPORTS_DIR  — Directory for output reports (default: reports)
-#
-# This script is designed for the SkyWater sky130 PDK by default.
-# Adjust the tech file and GDS path for other PDKs or technologies.
+# The Magic technology file is passed with -T on the command line.
+# The script exits non-zero when violations are found so `make drc` fails.
 # ============================================================================
 
 # ── Configuration ───────────────────────────────────────────────────────────
-# Resolve paths from environment or use defaults
 if {[info exists ::env(GDS_FILE)]} {
     set gds_file $::env(GDS_FILE)
 } else {
@@ -45,36 +39,28 @@ puts "  Top cell:    $top_cell"
 puts "  Report:      $drc_report"
 puts "============================================================"
 
-# ── Create output directory ─────────────────────────────────────────────────
 file mkdir $reports_dir
 
 # ── Load GDS ────────────────────────────────────────────────────────────────
-# Read the GDS file produced by place-and-route.
-# The tech file is loaded via the -rcfile flag on the command line.
 puts "\n>>> Loading GDS: $gds_file"
 gds read $gds_file
 
-# ── Select the top cell ─────────────────────────────────────────────────────
 puts ">>> Loading top cell: $top_cell"
 load $top_cell
 select top cell
 expand
 
-# ── Flatten hierarchy for DRC (optional) ────────────────────────────────────
-# Flattening can catch inter-cell violations but is slower on large designs.
-# Uncomment the next line for a flat DRC run:
-# flatten $top_cell
-# load ${top_cell}_flat
-
 # ── Run DRC ─────────────────────────────────────────────────────────────────
 puts "\n>>> Running DRC..."
+drc euclidean on
+drc style drc(full)
 drc catchup
 drc check
 
-# ── Collect and report results ──────────────────────────────────────────────
-set drc_count [drc listall why]
+# Total violation count — `drc list count total` is the stable interface.
+set total_errors [drc list count total]
 
-# Write report to file
+# ── Write report ────────────────────────────────────────────────────────────
 set rpt [open $drc_report w]
 puts $rpt "============================================================"
 puts $rpt "  Magic DRC Report — {{ip_name|capitalize}}"
@@ -84,18 +70,17 @@ puts $rpt "  Date: {% raw %}[clock format [clock seconds] -format {%Y-%m-%d %H:%
 puts $rpt "============================================================"
 puts $rpt ""
 
-set total_errors 0
-if {[llength $drc_count] == 0} {
+if {$total_errors == 0} {
     puts $rpt "No DRC violations found. Design is clean."
-    puts "\n>>> DRC PASSED — no violations found."
 } else {
-    foreach {rule_msg count} $drc_count {
-        puts $rpt "  $count violation(s): $rule_msg"
-        incr total_errors $count
+    # `drc listall why` returns one entry per violated rule description;
+    # dump each entry verbatim rather than assuming a {rule count} pairing.
+    puts $rpt "Violated rules:"
+    foreach why [drc listall why] {
+        puts $rpt "  - $why"
     }
     puts $rpt ""
-    puts $rpt "Total DRC violations: $total_errors"
-    puts "\n>>> DRC FAILED — $total_errors total violation(s)."
+    puts $rpt "Total DRC violation count: $total_errors"
 }
 
 puts $rpt ""
@@ -116,5 +101,8 @@ if {$total_errors == 0} {
 puts "  Report: $drc_report"
 puts "============================================================"
 
-# ── Exit ────────────────────────────────────────────────────────────────────
+# ── Exit (non-zero on violations so `make drc` fails) ──────────────────────
+if {$total_errors > 0} {
+    quit -noprompt 1
+}
 quit -noprompt

@@ -1,28 +1,45 @@
+# ============================================================================
+# STA Makefile — {{ip_name}}
+#   make          — full analysis (setup + hold + clocks + summary)
+#   make setup    — max-path (setup) checks only
+#   make hold     — min-path (hold) checks only
+# The analysis mode is passed to run_sta.tcl via STA_MODE.
+# ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 TOP_MODULE = mk{{ip_name|capitalize}}
 NETLIST  = ../synth/output/$(TOP_MODULE)_synth.v
 SDC_FILE = ../constraints/{{ip_name}}.sdc
+{% if liberty_file -%}
+LIB_FILE ?= {{liberty_file}}
+{%- else -%}
 LIB_FILE ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+{%- endif %}
 
 REPORT_DIR = reports
+
+export TOP_MODULE NETLIST SDC_FILE LIB_FILE REPORT_DIR
 
 # ============================================================
 # OpenSTA (open-source, default)
 # ============================================================
-.PHONY: sta clean setup hold all
+.PHONY: sta clean setup hold all folders check_netlist
 
 all: sta
 
-sta: folders
-	sta -exit run_sta.tcl
+check_netlist:
+	@test -f $(NETLIST) || { echo "ERROR: $(NETLIST) not found — run 'make -C ../synth' first."; exit 1; }
 
-setup: folders
-	sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/setup_summary.rpt
+sta: folders check_netlist
+	STA_MODE=all sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/sta.log
 
-hold: folders
-	sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/hold_summary.rpt
+setup: folders check_netlist
+	STA_MODE=setup sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/setup_summary.rpt
+
+hold: folders check_netlist
+	STA_MODE=hold sta -exit run_sta.tcl 2>&1 | tee $(REPORT_DIR)/hold_summary.rpt
 
 # ============================================================
 # PrimeTime (Synopsys commercial — stub)

@@ -19,7 +19,7 @@ stages:
 # ── Global defaults ─────────────────────────────────────────────────────────
 default:
   before_script:
-    - export {{ip_name|capitalize}}_ROOT=$(pwd)
+    - export {{ip_name|upper}}_ROOT=$(pwd)
     - export BLUESPEC_HOME=${BLUESPEC_HOME:-/tools/bsc-2026.01}
     - export PATH=$BLUESPEC_HOME/bin:$PATH
     - export PDK_ROOT=${PDK_ROOT:-/opt/pdk}
@@ -40,6 +40,18 @@ lint:
     when: always
     paths:
       - lint/reports/
+    expire_in: 7 days
+  tags:
+    - hdl
+
+cdc:
+  stage: lint
+  script:
+    - make -C cdc
+  artifacts:
+    when: always
+    paths:
+      - cdc/reports/
     expire_in: 7 days
   tags:
     - hdl
@@ -94,6 +106,7 @@ test:
   tags:
     - hdl
 
+{% if enable_formal %}
 formal:
   stage: verify
   needs: [rtl]
@@ -107,6 +120,7 @@ formal:
   allow_failure: true
   tags:
     - hdl
+{% endif %}
 
 # ============================================================================
 #  Stage: backend
@@ -185,7 +199,7 @@ drc:
 
 ci_report:
   stage: backend
-  needs: [lint, test, formal, synthesis, sta, power, pnr, drc]
+  needs: [lint, cdc, test,{% if enable_formal %} formal,{% endif %} synthesis, sta, power, pnr, drc]
   when: manual
   script:
     - make -C ci ci_report

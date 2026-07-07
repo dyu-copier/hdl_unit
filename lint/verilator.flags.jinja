@@ -48,13 +48,9 @@
 // rule selection. These are correct by construction.
 -Wno-CASEOVERLAP
 
-// INITIALDLY: BSV uses initial blocks with delays for VCD dumping and
-// simulation scaffolding. Not relevant for synthesis lint.
--Wno-INITIALDLY
-
-// STMTDLY: BSV simulation wrappers use #-delays in initial blocks.
-// These are simulation-only constructs, safe to ignore for lint.
--Wno-STMTDLY
+// INITIALDLY / STMTDLY: kept ENABLED. Waveform dumping now lives in the
+// testbench (tb/dump.v), so the linted netlist should contain no initial
+// blocks with delays — if these fire, sim-only code leaked into the RTL.
 
 // BLKSEQ: BSV generates blocking assignments inside always @(posedge clk)
 // blocks for combinational temporaries. The BSV compiler ensures correct
@@ -64,6 +60,14 @@
 // COMBDLY: BSV may use non-blocking assignments in combinational blocks
 // as part of its scheduling model. Safe for generated code.
 -Wno-COMBDLY
+
+// SYNCASYNCNET: the project's fixed reset convention (CLAUDE.md) is
+// asynchronous, active-low reset project-wide. BSC's own codegen for this
+// pattern uses RST_N both as an async reset edge (in always @(posedge CLK or
+// negedge RST_N)) and, separately, as a synchronous reset-value check inside
+// CSR/register logic (e.g. mkConfigCSR_*_Reg.v) — expected on every BSC IP
+// under this convention, not a per-IP issue.
+-Wno-SYNCASYNCNET
 
 // ---------------------------------------------------------------------------
 // Warnings kept ENABLED (these catch real issues even in BSV output)

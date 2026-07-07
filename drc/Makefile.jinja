@@ -2,22 +2,26 @@
 # DRC / LVS Physical Verification Makefile — {{ip_name}}
 # Author: {{author}} <{{email}}>
 # Description: {{ip_short_desc}}
+#
+# Consumes the GDS produced by LibreLane (`make -C ../pnr`).
 # ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 # ── Project paths ───────────────────────────────────────────────────────────
 TOP_MODULE   ?= mk{{ip_name|capitalize}}
 # LibreLane writes GDS to pnr/runs/<tag>/final/gds/; pick the latest run.
-GDS_FILE     ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).gds" \
+GDS_FILE     ?= $(shell find $({{ip_name|upper}}_ROOT)/pnr/runs -name "$(TOP_MODULE).gds" \
                   -path "*/final/gds/*" 2>/dev/null | sort | tail -1)
-VERILOG_GL   ?= $(shell find $({{ip_name|capitalize}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
+VERILOG_GL   ?= $(shell find $({{ip_name|upper}}_ROOT)/pnr/runs -name "$(TOP_MODULE).nl.v" \
                   -path "*/final/nl/*" 2>/dev/null | sort | tail -1)
 REPORTS_DIR  ?= reports
 
 # ── Magic settings (open-source DRC) ───────────────────────────────────────
 MAGIC        ?= magic
 MAGIC_TCL    ?= magic_drc.tcl
+# Magic technology file — passed with -T (a .tech file is not a magicrc)
 TECH_FILE    ?= $(PDK_ROOT)/sky130A/libs.tech/magic/sky130A.tech
 
 # ── Calibre settings (commercial DRC/LVS) ─────────────────────────────────
@@ -30,13 +34,17 @@ LVS_RULES    ?= $(PDK_ROOT)/calibre/lvs_rules
 #  Magic DRC (Open-Source)
 # ============================================================================
 
-.PHONY: drc lvs folders clean
+.PHONY: drc lvs folders clean check_gds
 
 folders:
 	mkdir -p $(REPORTS_DIR)
 
-drc: folders
-	$(MAGIC) -dnull -noconsole -rcfile $(TECH_FILE) < $(MAGIC_TCL) \
+check_gds:
+	@test -n "$(GDS_FILE)" -a -f "$(GDS_FILE)" || { echo "ERROR: no GDS found under pnr/runs/ — run 'make -C ../pnr' first."; exit 1; }
+
+drc: folders check_gds
+	GDS_FILE=$(GDS_FILE) REPORTS_DIR=$(REPORTS_DIR) \
+	$(MAGIC) -dnull -noconsole -T $(TECH_FILE) $(MAGIC_TCL) \
 	  2>&1 | tee $(REPORTS_DIR)/magic_drc.log
 	@echo "[drc] Magic DRC complete. Report: $(REPORTS_DIR)/magic_drc.rpt"
 

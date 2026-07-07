@@ -1,28 +1,54 @@
+# ============================================================================
+# cocotb testbench Makefile — {{ip_name}}
+#
+# Usage:
+#   make            — run tb/test_default.py against the BSV-generated top
+#   make tst=<name> — run tb/test_<name>.py
+#
+# Waveforms: tb/dump.v provides $dumpfile/$dumpvars (writes {{ip_name}}.vcd
+# in this directory — power/ picks up the newest *.vcd under tb/). The
+# generated netlist itself stays dump-free.
+# ============================================================================
+
+ifndef {{ip_name|upper}}_ROOT
+$(error {{ip_name|upper}}_ROOT is not set — run via the top-level Makefile or source .autoenv.zsh first)
+endif
+
 tst      = default
 TOPLEVEL = mk{{ip_name|capitalize}}
 MODULE   = test_$(tst)
 SIM_BUILD = $(tst)_build
 
-ifeq ($(tst), default)
-	VERILOG_DIR = $({{ip_name|capitalize}}_ROOT)/verilog
-	VERILOG_SOURCES += $(filter-out $(wildcard $(VERILOG_DIR)/BRAM*.v),$(wildcard $(VERILOG_DIR)/*.v))
-else
-	VERILOG_DIR = $({{ip_name|capitalize}}_ROOT)/someother_verilog
-	VERILOG_SOURCES += $(VERILOG_DIR)/design/$(TOPLEVEL).v
-endif
+VERILOG_DIR = $({{ip_name|upper}}_ROOT)/verilog
+# BRAM primitives use sim constructs icarus dislikes in this flow; exclude.
+VERILOG_SOURCES += $(filter-out $(wildcard $(VERILOG_DIR)/BRAM*.v),$(wildcard $(VERILOG_DIR)/*.v))
+VERILOG_SOURCES += dump.v
 
 SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 WAVES ?= 1
 
+# Elaborate the waveform-dump module as an extra top. cocotb's own
+# Makefile.icarus already adds "-s $(TOPLEVEL)" for the DUT — adding it again
+# here produces a duplicate "-s mkMyip -s mkMyip" that segfaults this
+# iverilog build (Error 139), so only add the dump module here.
+COMPILE_ARGS += -s dump
+
 # RAL model generated from SystemRDL; required by test_default.py
-RDL_SRC := $({{ip_name|capitalize}}_ROOT)/systemrdl/{{ip_name}}.rdl
-RAL_PY  := $({{ip_name|capitalize}}_ROOT)/tb/{{ip_name|capitalize}}_Reg_RAL.py
+RDL_SRC := $({{ip_name|upper}}_ROOT)/systemrdl/{{ip_name}}.rdl
+RAL_PY  := $({{ip_name|upper}}_ROOT)/tb/{{ip_name|capitalize}}_Reg_RAL.py
 
 $(RAL_PY): $(RDL_SRC)
 	peakrdl cocotb_ralgen $< -o $(dir $@)
 
-include $(shell cocotb-config --makefiles)/Makefile.sim
+COCOTB_MAKEFILES := $(shell cocotb-config --makefiles 2>/dev/null)
+ifneq ($(COCOTB_MAKEFILES),)
+include $(COCOTB_MAKEFILES)/Makefile.sim
+else
+.PHONY: all
+all:
+	$(error cocotb-config not found — install project dependencies first (pip install -e . / uv sync))
+endif
 
 # Ensure RAL is generated before the simulation target
 sim: $(RAL_PY)
@@ -30,9 +56,8 @@ sim: $(RAL_PY)
 # Cocotb's Makefile.sim defines `all: sim`. Force it to be the default goal —
 # otherwise the first target with a recipe in this file ($(RAL_PY)) wins and
 # `make` would only regenerate the RAL model without ever running the sim
-# (leaving no decode.vcd, which power/ needs).
+# (leaving no {{ip_name}}.vcd, which power/ needs).
 .DEFAULT_GOAL := all
 
-.PHONY: stem
-stem:
-	@echo $(tst)
+clean::
+	rm -rf *_build results.xml *.vcd coverage_*.yaml $(RAL_PY)

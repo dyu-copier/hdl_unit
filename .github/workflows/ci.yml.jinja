@@ -23,7 +23,7 @@ jobs:
       - name: Checkout bsv_axi
         uses: actions/checkout@v4
         with:
-          repository: {% raw %}${{ github.repository_owner }}{% endraw %}/bsv_axi
+          repository: dyumnin/bsv_bus_protocols
           path: bsv_axi
 
       - name: Purge stale .bo files in bsv_axi (BSC version mismatch guard)
@@ -37,8 +37,8 @@ jobs:
           docker run --rm \
             -v {% raw %}${{ github.workspace }}{% endraw %}/bsv_axi:/bsv_axi:ro \
             -v {% raw %}${{ github.workspace }}{% endraw %}/{{ip_name}}:/tmp/{{ip_name}} \
-            -e {{ip_name|capitalize}}_ROOT=/tmp/{{ip_name}} \
-            -e BSC_PATH=".:/bsv_axi/unified_axi/src/axi4:/bsv_axi/unified_axi/src/apb:/bsv_axi/unified_axi/src/common:+" \
+            -e {{ip_name|upper}}_ROOT=/tmp/{{ip_name}} \
+            -e BSC_PATH=".:/bsv_axi/src/axi4:/bsv_axi/src/apb:/bsv_axi/src/common:+" \
             -e PDK_ROOT=/opt/pdk \
             -w /tmp/{{ip_name}} \
             ghcr.io/dyu-copier/rtl_unit_tools:latest \

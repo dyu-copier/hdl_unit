@@ -1,0 +1,44 @@
+# ==============================================================================
+# PDK-specific PnR configuration — {{target_process}}
+# Sourced by openroad_flow.tcl. All cell names and layer names that differ
+# between PDKs live here; the flow script itself is PDK-neutral.
+# ==============================================================================
+{% if target_process == "sky130" %}
+# SkyWater sky130, sky130_fd_sc_hd standard-cell library
+set PDK(site)            "unithd"
+set PDK(cts_root_buf)    "sky130_fd_sc_hd__clkbuf_16"
+set PDK(cts_buf_list)    {sky130_fd_sc_hd__clkbuf_2 sky130_fd_sc_hd__clkbuf_4 sky130_fd_sc_hd__clkbuf_8}
+set PDK(pin_hor_layer)   "met3"
+set PDK(pin_ver_layer)   "met2"
+set PDK(min_route_layer) "met1"
+set PDK(max_route_layer) "met5"
+set PDK(tapcell)         "sky130_fd_sc_hd__tapvpwrvgnd_1"
+set PDK(filler_cells)    {sky130_fd_sc_hd__fill_1 sky130_fd_sc_hd__fill_2 sky130_fd_sc_hd__decap_4 sky130_fd_sc_hd__decap_8}
+{% elif target_process == "gf180" %}
+# GlobalFoundries gf180mcu, gf180mcu_fd_sc_mcu7t5v0 standard-cell library
+set PDK(site)            "GF018hv5v_mcu_sc7"
+set PDK(cts_root_buf)    "gf180mcu_fd_sc_mcu7t5v0__clkbuf_16"
+set PDK(cts_buf_list)    {gf180mcu_fd_sc_mcu7t5v0__clkbuf_2 gf180mcu_fd_sc_mcu7t5v0__clkbuf_4 gf180mcu_fd_sc_mcu7t5v0__clkbuf_8}
+set PDK(pin_hor_layer)   "Metal3"
+set PDK(pin_ver_layer)   "Metal2"
+set PDK(min_route_layer) "Metal1"
+set PDK(max_route_layer) "Metal5"
+set PDK(tapcell)         "gf180mcu_fd_sc_mcu7t5v0__filltie"
+set PDK(filler_cells)    {gf180mcu_fd_sc_mcu7t5v0__fill_1 gf180mcu_fd_sc_mcu7t5v0__fill_2}
+{% else %}
+# TODO: fill in the cell/layer names for '{{target_process}}'.
+# The flow will stop here until these are set.
+set PDK(site)            "FIXME_site_name"
+set PDK(cts_root_buf)    "FIXME_root_clkbuf"
+set PDK(cts_buf_list)    {FIXME_clkbuf_list}
+set PDK(pin_hor_layer)   "FIXME_hor_layer"
+set PDK(pin_ver_layer)   "FIXME_ver_layer"
+set PDK(min_route_layer) "FIXME_min_layer"
+set PDK(max_route_layer) "FIXME_max_layer"
+set PDK(tapcell)         ""
+set PDK(filler_cells)    {}
+if {[string match "FIXME*" $PDK(site)]} {
+    puts "ERROR: pnr/pdk_config.tcl has not been filled in for {{target_process}}."
+    exit 1
+}
+{% endif %}

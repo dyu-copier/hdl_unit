@@ -1,19 +1,34 @@
+# ============================================================================
+# Top-level Makefile — {{ip_name}}
+# {{ip_short_desc}}
+#
+# Targets carry real prerequisites so `make -j` is safe. bsv/Makefile owns
+# the systemrdl (CSR) generation step; PnR is LibreLane (RTL→GDS, does its
+# own synthesis), so pnr depends on rtl, not synth.
+# ============================================================================
+
 # Auto-export project root so all sub-makes can find BSV/Verilog sources.
-export {{ip_name|capitalize}}_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
+export {{ip_name|upper}}_ROOT ?= $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 # PDK root: /opt/pdk in the Docker container; override for local dev.
 export PDK_ROOT ?= /opt/pdk
 
-.PHONY: all csr rtl lint formal test synth sta pnr drc power fpga doc \
-        ci_quick ci_full clean help
+.PHONY: all check_env csr rtl lint cdc test synth sta pnr drc power doc \
+        testplan ci_quick ci_full clean help{% if enable_formal %} formal{% endif %}{% if enable_fpga %} fpga{% endif %}
 
 # Default: full RTL-to-GDS flow
 all: ci_full
 
 # ── Individual targets with dependency ordering ──────────────────────────────
 
+check_env:
+	./scripts/check_env.sh
+
 csr:
 	$(MAKE) -C systemrdl
+
+testplan:
+	python3 scripts/gen_testplan.py
 
 rtl: csr
 	$(MAKE) -C bsv
@@ -21,9 +36,12 @@ rtl: csr
 lint: rtl
 	$(MAKE) -C lint
 
+cdc: rtl
+	$(MAKE) -C cdc
+{% if enable_formal %}
 formal: rtl
 	$(MAKE) -C formal
-
+{% endif %}
 test: rtl
 	$(MAKE) -C tb
 
@@ -41,11 +59,11 @@ drc: pnr
 
 power: pnr test
 	$(MAKE) -C power
-
+{% if enable_fpga %}
 fpga: rtl
 	$(MAKE) -C fpga
-
-doc:
+{% endif %}
+doc: testplan
 	$(MAKE) -C doc
 
 # ── Composite targets ─────────────────────────────────────────────────────────
@@ -55,7 +73,7 @@ ci_quick: lint test
 	@echo "━━━ ci_quick DONE ━━━"
 
 # Full flow — RTL through GDS with all reports
-ci_full: lint formal test synth sta pnr drc power
+ci_full: lint cdc{% if enable_formal %} formal{% endif %} test synth sta pnr drc power
 	@echo "━━━ ci_full (RTL → GDS) DONE ━━━"
 
 # ── Clean ─────────────────────────────────────────────────────────────────────
@@ -64,36 +82,43 @@ clean:
 	$(MAKE) -C systemrdl clean
 	$(MAKE) -C bsv clean
 	$(MAKE) -C lint clean
+	$(MAKE) -C cdc clean
+{%- if enable_formal %}
 	$(MAKE) -C formal clean
+{%- endif %}
 	$(MAKE) -C tb clean
 	$(MAKE) -C synth clean
 	$(MAKE) -C sta clean
-	$(MAKE) -C power clean
 	$(MAKE) -C pnr clean
 	$(MAKE) -C drc clean
+	$(MAKE) -C power clean
+{%- if enable_fpga %}
+	$(MAKE) -C fpga clean
+{%- endif %}
 	$(MAKE) -C doc clean
-{% if enable_fpga %}	$(MAKE) -C fpga clean
-{% endif %}
-# ── Help ──────────────────────────────────────────────────────────────────────
 
 help:
-	@echo "Targets for {{ip_name}} ($({{ip_name|capitalize}}_ROOT)):"
-	@echo ""
-	@echo "  make / make ci_full  — full RTL-to-GDS flow (default)"
-	@echo "  make ci_quick        — lint + simulation only (fast dev loop)"
-	@echo ""
-	@echo "  make csr             — SystemRDL → BSV/Verilog register maps"
-	@echo "  make rtl             — BSV → Verilog (runs csr first)"
-	@echo "  make lint            — Verilator + Verible lint"
-	@echo "  make formal          — SymbiYosys formal verification"
-	@echo "  make test            — cocotb simulation"
-	@echo "  make synth           — Yosys synthesis"
-	@echo "  make sta             — OpenSTA timing analysis"
-	@echo "  make pnr             — LibreLane place & route (sky130A)"
-	@echo "  make drc             — Magic DRC on PnR GDS"
-	@echo "  make power           — OpenSTA power estimation"
-{% if enable_fpga %}	@echo "  make fpga            — Vivado FPGA flow (stub)"
-{% endif %}	@echo "  make doc             — pandoc documentation"
-	@echo "  make clean           — remove all build artefacts"
-	@echo ""
-	@echo "  PDK_ROOT = $(PDK_ROOT)"
+	@echo "Available targets:"
+	@echo "  all       - Full RTL-to-GDS flow (default; = ci_full)"
+	@echo "  check_env - Probe for required/optional tools"
+	@echo "  csr       - Generate CSR register maps (SystemRDL)"
+	@echo "  testplan  - Generate doc/testplan.md from testplan/features/*.md"
+	@echo "  rtl       - Compile RTL (BSV -> Verilog)"
+	@echo "  lint      - RTL linting (Verilator, Verible, Spyglass)"
+	@echo "  cdc       - Clock-domain-crossing structural check (Yosys)"
+{%- if enable_formal %}
+	@echo "  formal    - Formal verification (SymbiYosys + ZipCPU checkers)"
+{%- endif %}
+	@echo "  test      - Run testbench / simulation (cocotb)"
+	@echo "  synth     - Logic synthesis (Yosys standalone)"
+	@echo "  sta       - Static timing analysis (OpenSTA)"
+	@echo "  pnr       - Place & route (LibreLane RTL->GDS)"
+	@echo "  drc       - DRC / LVS checks (Magic on LibreLane GDS)"
+	@echo "  power     - Power analysis (OpenSTA, gate-level netlist + sim VCD)"
+{%- if enable_fpga %}
+	@echo "  fpga      - FPGA prototyping (Vivado, Quartus)"
+{%- endif %}
+	@echo "  doc       - Generate documentation"
+	@echo "  ci_quick  - CI quick check: lint test"
+	@echo "  ci_full   - CI full flow (RTL -> GDS)"
+	@echo "  clean     - Clean all subdirectories"

@@ -20,8 +20,9 @@
 # Each task name becomes a subdirectory for results.  Tasks can override
 # options/engines by using conditional tags (task name as prefix).
 #
-#   prove  — Attempt to prove all SVA/PSL assertions hold for all reachable
-#             states (bounded model checking up to the configured depth).
+#   prove  — mode prove = k-induction (unbounded proof attempt). For a
+#             plain bounded check use 'mode bmc' (what 'make sby-prove'
+#             generates).
 #   cover  — Check that all cover() statements are reachable, ensuring the
 #             design constraints are not over-constrained.
 # ---------------------------------------------------------------------------
@@ -32,7 +33,8 @@ cover
 # ---------------------------------------------------------------------------
 # [options]  —  Per-task solver options
 #
-# mode prove   — bounded model checking; tries to find assertion violations.
+# mode prove   — k-induction (unbounded proof attempt); 'mode bmc' is the
+#                bounded check that only finds violations up to depth N.
 # mode cover   — reachability analysis; tries to hit cover() targets.
 # depth N      — number of clock cycles to unroll.  Increase if proofs are
 #                inconclusive or cover targets are not reached.  Deeper
@@ -40,6 +42,7 @@ cover
 # timeout N    — wall-clock seconds before the solver aborts (0 = no limit).
 # ---------------------------------------------------------------------------
 [options]
+multiclock off
 prove: mode prove
 prove: depth 20
 cover: mode cover

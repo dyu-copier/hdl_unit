@@ -1,0 +1,9 @@
+// Testbench-only waveform dump module for {{ip_name}}.
+// Kept out of the generated netlist so lint/synth/formal see clean RTL.
+// Elaborated as an extra toplevel alongside the DUT (see tb/Makefile).
+module dump;
+  initial begin
+    $dumpfile("{{ip_name}}.vcd");
+    $dumpvars(0, mk{{ip_name|capitalize}});
+  end
+endmodule

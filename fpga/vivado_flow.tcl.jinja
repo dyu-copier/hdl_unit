@@ -12,7 +12,7 @@
 # ============================================================================
 
 # ── Parse command-line arguments ────────────────────────────────────────────
-set part        "xc7a35tcpg236-1"
+set part        "{{fpga_part}}"
 set top         "mk{{ip_name|capitalize}}"
 set verilog_dir "../verilog"
 set xdc_file    "{{ip_name}}.xdc"
@@ -62,6 +62,18 @@ foreach src [glob -nocomplain ${verilog_dir}/*.v] {
 foreach src [glob -nocomplain ${verilog_dir}/*.sv] {
     puts "Reading: $src"
     read_verilog -sv $src
+}
+
+# Bluespec primitive library — read from the bsc installation; modules not
+# referenced by the design are simply ignored at elaboration. main.v is the
+# bsc simulation harness and must be skipped.
+if {[info exists ::env(BLUESPEC_HOME)]} {
+    foreach src [glob -nocomplain $::env(BLUESPEC_HOME)/lib/Verilog/*.v] {
+        if {[file tail $src] eq "main.v"} { continue }
+        read_verilog $src
+    }
+} else {
+    puts "WARNING: BLUESPEC_HOME not set — Bluespec primitives will be missing."
 }
 
 # Read XDC constraints

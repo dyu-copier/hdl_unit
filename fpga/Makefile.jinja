@@ -5,18 +5,23 @@
 # ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
+
+ifndef {{ip_name|upper}}_ROOT
+$(error {{ip_name|upper}}_ROOT is not set — source .autoenv.zsh from the repo root first)
+endif
 
 # ── Project paths ───────────────────────────────────────────────────────────
 TOP_MODULE   ?= mk{{ip_name|capitalize}}
-VERILOG_DIR  ?= $({{ip_name|capitalize}}_ROOT)/verilog
-CONSTRAINTS_DIR ?= $({{ip_name|capitalize}}_ROOT)/fpga
+VERILOG_DIR  ?= $({{ip_name|upper}}_ROOT)/verilog
+CONSTRAINTS_DIR ?= $({{ip_name|upper}}_ROOT)/fpga
 
 # ── Vivado (Xilinx) settings ────────────────────────────────────────────────
 VIVADO       ?= vivado
 VIVADO_FLAGS ?= -mode batch -nojournal -nolog
 VIVADO_TCL   ?= vivado_flow.tcl
 XDC_FILE     ?= $(CONSTRAINTS_DIR)/{{ip_name}}.xdc
-FPGA_PART    ?= xc7a35tcpg236-1
+FPGA_PART    ?= {{fpga_part}}
 
 # ── Quartus (Intel) settings ────────────────────────────────────────────────
 QUARTUS_SH   ?= quartus_sh

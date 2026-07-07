@@ -1,0 +1,38 @@
+# ============================================================================
+# Vivado hardware programming script — {{ip_name}}
+# Invoked by `make program` (fpga/Makefile) as:
+#   vivado -mode batch -source program.tcl -tclargs --bitfile <path/to.bit>
+# ============================================================================
+
+set bitfile ""
+
+for {set i 0} {$i < [llength $argv]} {incr i} {
+    switch -- [lindex $argv $i] {
+        --bitfile { incr i; set bitfile [lindex $argv $i] }
+        default   { puts "WARNING: Unknown argument: [lindex $argv $i]" }
+    }
+}
+
+if {$bitfile eq "" || ![file exists $bitfile]} {
+    puts "ERROR: bitstream not found: '$bitfile' — run 'make bitstream' first."
+    exit 1
+}
+
+open_hw_manager
+connect_hw_server
+open_hw_target
+
+set device [lindex [get_hw_devices] 0]
+current_hw_device $device
+refresh_hw_device $device
+
+set_property PROGRAM.FILE $bitfile $device
+puts ">>> Programming $device with $bitfile"
+program_hw_devices $device
+refresh_hw_device $device
+
+puts ">>> Programming complete."
+close_hw_target
+disconnect_hw_server
+close_hw_manager
+exit 0

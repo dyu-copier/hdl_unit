@@ -4,24 +4,41 @@
 #
 # Lint targets (open-source):
 #   verilator  — Verilator --lint-only (default)
-#   verible   — Verible verilog lint
+#   verible    — Verible verilog lint
 #
 # Commercial stubs:
 #   spyglass  — Synopsys SpyGlass lint (requires license)
+#
+# Exit-status policy: recipes fail if the tool fails (pipefail) AND if the
+# report contains more warnings/errors than the configured thresholds —
+# lint is a gate, not just an artifact generator.
 #
 # Author: {{author}} <{{email}}>
 # ============================================================================
 .ONESHELL:
 SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -ec
+
+ifndef {{ip_name|upper}}_ROOT
+$(error {{ip_name|upper}}_ROOT is not set — source .autoenv.zsh from the repo root first)
+endif
+ifndef BLUESPEC_HOME
+$(error BLUESPEC_HOME is not set — point it at your bsc installation)
+endif
 
 # ---------------------------------------------------------------------------
 # Paths & variables
 # ---------------------------------------------------------------------------
-VERILOG_DIR   := $({{ip_name|capitalize}}_ROOT)/verilog
+VERILOG_DIR   := $({{ip_name|upper}}_ROOT)/verilog
 TOP_MODULE    := mk{{ip_name|capitalize}}
 TOP_FILE      := $(VERILOG_DIR)/$(TOP_MODULE).v
 REPORT_DIR    := reports
 FLAGS_FILE    := verilator.flags
+BSC_LIB_WAIVERS := bsc_lib_waivers.vlt
+
+# Fail thresholds (0 = fully clean required)
+MAX_WARNINGS  ?= 0
+MAX_ERRORS    ?= 0
 
 # Collect all Verilog sources in the verilog directory
 VLOG_SRCS     := $(wildcard $(VERILOG_DIR)/*.v)
@@ -39,6 +56,7 @@ $(REPORT_DIR):
 
 # ---------------------------------------------------------------------------
 # Verilator lint-only (open-source, default)
+# Bluespec primitives are resolved from $(BLUESPEC_HOME)/lib/Verilog via -y.
 # ---------------------------------------------------------------------------
 .PHONY: verilator
 verilator: $(REPORT_DIR)
@@ -48,8 +66,17 @@ verilator: $(REPORT_DIR)
 		$(if $(wildcard $(FLAGS_FILE)),-f $(FLAGS_FILE)) \
 		--top-module $(TOP_MODULE) \
 		-y $(VERILOG_DIR) \
+		-y $(BLUESPEC_HOME)/lib/Verilog \
+		$(if $(wildcard $(BSC_LIB_WAIVERS)),$(BSC_LIB_WAIVERS)) \
 		$(TOP_FILE) \
 		2>&1 | tee $(REPORT_DIR)/verilator_lint.rpt
+	warnings=$$(grep -c '^%Warning' $(REPORT_DIR)/verilator_lint.rpt || true)
+	errors=$$(grep -c '^%Error' $(REPORT_DIR)/verilator_lint.rpt || true)
+	echo "Verilator: $$errors error(s), $$warnings warning(s) (thresholds: $(MAX_ERRORS)/$(MAX_WARNINGS))"
+	if [ "$$errors" -gt "$(MAX_ERRORS)" ] || [ "$$warnings" -gt "$(MAX_WARNINGS)" ]; then
+		echo "LINT GATE FAILED — see $(REPORT_DIR)/verilator_lint.rpt"
+		exit 1
+	fi
 	@echo "Report: $(REPORT_DIR)/verilator_lint.rpt"
 
 # ---------------------------------------------------------------------------
@@ -59,8 +86,7 @@ verilator: $(REPORT_DIR)
 verible: $(REPORT_DIR)
 	@echo "=== Verible Lint: $(TOP_MODULE) ==="
 	verible-verilog-lint \
-		--rules_config=$({{ip_name|capitalize}}_ROOT)/lint/.verible_lint_rules 2>/dev/null; \
-	 verible-verilog-lint \
+		--rules_config=.verible_lint_rules \
 		$(VLOG_SRCS) \
 		2>&1 | tee $(REPORT_DIR)/verible_lint.rpt
 	@echo "Report: $(REPORT_DIR)/verible_lint.rpt"
@@ -95,9 +121,10 @@ clean:
 .PHONY: help
 help:
 	@echo "Lint targets for {{ip_name}}:"
-	@echo "  make              — run Verilator lint (default)"
+	@echo "  make              — run Verilator lint (default, gated)"
 	@echo "  make verilator    — Verilator --lint-only"
 	@echo "  make verible      — Verible verilog lint"
 	@echo "  make spyglass     — SpyGlass lint (stub)"
 	@echo "  make lint-all     — run all open-source linters"
+	@echo "  make MAX_WARNINGS=5 — relax the warning gate"
 	@echo "  make clean        — remove reports and temporaries"

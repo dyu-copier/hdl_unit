@@ -12,12 +12,13 @@
 # ============================================================================
 .ONESHELL:
 SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 # ---------------------------------------------------------------------------
 # Paths & variables
 # ---------------------------------------------------------------------------
-VERILOG_DIR   := $({{ip_name|capitalize}}_ROOT)/verilog
-FORMAL_DIR    := $({{ip_name|capitalize}}_ROOT)/formal
+VERILOG_DIR   := $({{ip_name|upper}}_ROOT)/verilog
+FORMAL_DIR    := $({{ip_name|upper}}_ROOT)/formal
 TOP_MODULE    := mk{{ip_name|capitalize}}
 TB_MODULE     := tb_mk{{ip_name|capitalize}}
 FORMAL_TB     := $(FORMAL_DIR)/{{ip_name}}_tb.sv
@@ -75,8 +76,8 @@ sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[options]\nprove: mode bmc\nprove: depth 20\ncover: mode cover\ncover: depth 40\n\n'; \
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
@@ -98,8 +99,8 @@ sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[options]\nprove: mode bmc\nprove: depth 20\n\n'; \
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
@@ -120,8 +121,8 @@ sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[options]\ncover: mode cover\ncover: depth 40\n\n'; \
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL %s\n' "$(CHECKER_AXI)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
+	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \

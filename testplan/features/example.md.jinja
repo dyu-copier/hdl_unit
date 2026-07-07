@@ -1,0 +1,21 @@
+# Feature: Reset and Register Access
+
+Baseline checkpoints every IP starts with: reset behavior and CSR
+accessibility. Replace/extend with spec-derived checkpoints as
+`{{ip_name}}_spec.md` matures (see the `testplan` skill for the format).
+
+## CP-01 — Block comes out of reset cleanly
+
+- **Category:** reset
+- **Source:** {{ip_name}}_spec.md §9
+- **Precondition:** none
+- **Stimulus:** Assert RST_N low for 5 cycles, release, run 20 cycles
+- **Expected:** No X propagation; interrupt output deasserted; STS.BUSY low
+
+## CP-02 — ID register reads back major/minor revision
+
+- **Category:** register-rw
+- **Source:** ID.major / ID.minor
+- **Precondition:** Reset complete
+- **Stimulus:** Read the ID register over the APB config bus
+- **Expected:** Value matches the RDL reset value (major=0, minor=1)

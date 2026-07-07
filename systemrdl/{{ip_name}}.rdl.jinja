@@ -1,16 +1,79 @@
+// ============================================================================
+// {{ip_name}}.rdl — CSR specification for {{ip_name}}
+// Author: {{author}} <{{email}}>
+//
+// Register block ordering follows the project CSR convention:
+//   ID -> INTERRUPT_SET / INTERRUPT_STATUS / INTERRUPT_MASK / INTERRUPT
+//      -> CFG_* -> STS_*
+// Every protocol exception identified for the IP must map to a dedicated
+// INTERRUPT_STATUS bit. CFG_*/STS_* contents are IP-specific.
+// ============================================================================
 addrmap {{ip_name|capitalize}}_Reg {
   name="{{ip_name|capitalize}} CSR Registers";
+  desc="{{ip_short_desc}}";
   alignment=4;
   default regwidth=32;
-  reg {
-    field {sw=r; desc="IP Version Max Number";} version_max[31:16]=0;
-    field {sw=r; desc="IP Version Min Number";} version_min[15:0]=1;
-  } Version;
 
-  //reg { } STATUS; 
-  //reg { } CTRL;
-  //reg { } INTERRUPT_Mask;
-  //reg { } INTERRUPT_STATUS;
-  //reg { } INTERRUPT_TEST;
+  // ── ID: unique IP ID + major/minor revision (read-only, hardwired) ────────
+  reg {
+    name="ID Register";
+    desc="Unique IP identifier and revision.";
+    field {sw=r; hw=r; desc="IP major revision";} major[31:16] = 0;
+    field {sw=r; hw=r; desc="IP minor revision";} minor[15:0]  = 1;
+  } ID;
+
+  // ── INTERRUPT_SET: test-only, forces interrupt status bits ───────────────
+  reg {
+    name="Interrupt Set Register";
+    desc="Write-only, test-only. Writing 1 to a bit OR-sets the corresponding
+          INTERRUPT_STATUS bit (never clears). RTL implements the set path.";
+    field {sw=w; hw=r; desc="Force DONE interrupt";} DONE[0:0] = 0;
+    field {sw=w; hw=r; desc="Force ERR interrupt";}  ERR[1:1]  = 0;
+  } INTERRUPT_SET;
+
+  // ── INTERRUPT_STATUS: sticky event flags, write-1-to-clear ───────────────
+  reg {
+    name="Interrupt Status Register";
+    desc="Sticky interrupt flags. Hardware sets a bit when the event occurs;
+          firmware clears it by writing 1 (woclr). One bit per protocol
+          exception.";
+    field {sw=rw; hw=w; woclr; desc="Operation done";}  DONE[0:0] = 0;
+    field {sw=rw; hw=w; woclr; desc="Error condition";} ERR[1:1]  = 0;
+  } INTERRUPT_STATUS;
+
+  // ── INTERRUPT_MASK: enables propagation of status bits to INTERRUPT ──────
+  reg {
+    name="Interrupt Mask Register";
+    desc="1 = enable the corresponding INTERRUPT_STATUS bit to drive the
+          INTERRUPT register and the interrupt output pin.";
+    field {sw=rw; hw=r; desc="Enable DONE interrupt";} DONE[0:0] = 0;
+    field {sw=rw; hw=r; desc="Enable ERR interrupt";}  ERR[1:1]  = 0;
+  } INTERRUPT_MASK;
+
+  // ── INTERRUPT: masked view, drives the interrupt output pin ──────────────
+  reg {
+    name="Interrupt Register";
+    desc="Read-only: INTERRUPT_STATUS & INTERRUPT_MASK, maintained by
+          hardware. Drives the interrupt output pin.";
+    field {sw=r; hw=w; desc="Masked DONE interrupt";} DONE[0:0] = 0;
+    field {sw=r; hw=w; desc="Masked ERR interrupt";}  ERR[1:1]  = 0;
+  } INTERRUPT;
+
+  // ── CFG_*: IP-specific configuration (firmware writes, hardware reads) ───
+  reg {
+    name="Control Configuration Register";
+    desc="Top-level control bits for {{ip_name}}. Extend per IP.";
+    field {sw=rw; hw=r; desc="Enable the block";}                ENABLE[0:0]   = 0;
+    field {sw=rw; hw=r; singlepulse; desc="Software reset (self-clearing)";} SOFT_RST[1:1] = 0;
+    field {sw=rw; hw=r; desc="Operating mode";}                  MODE[3:2]     = 0;
+  } CFG_CTRL;
+
+  // ── STS_*: IP-specific non-sticky current status (hardware-driven) ───────
+  reg {
+    name="Status Register";
+    desc="Non-sticky, hardware-driven current status. Extend per IP.";
+    field {sw=r; hw=w; desc="Block is busy";}    BUSY[0:0]  = 0;
+    field {sw=r; hw=w; desc="Current error";}    ERROR[1:1] = 0;
+  } STS;
 
 };

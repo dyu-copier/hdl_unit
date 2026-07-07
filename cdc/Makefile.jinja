@@ -2,8 +2,14 @@
 # Makefile for Clock Domain Crossing (CDC) Analysis — {{ip_name}}
 # {{ip_short_desc}}
 #
-# Open-source approach:
-#   yosys_cdc  — Yosys-based CDC check using cdc_check.tcl
+# Open-source approach (two stages):
+#   1. Yosys elaborates + flattens the design and dumps a JSON netlist
+#      (cdc/cdc_check.tcl).
+#   2. scripts/cdc_report.py groups flip-flops by clock net and flags
+#      flop-to-flop paths whose source is in a different clock domain.
+#
+# This is a *structural* check: it cannot judge synchronizer correctness.
+# For production CDC signoff use a commercial tool (SpyGlass CDC, Meridian).
 #
 # Commercial stubs:
 #   spyglass_cdc — Synopsys SpyGlass CDC (requires license)
@@ -12,46 +18,47 @@
 # ============================================================================
 .ONESHELL:
 SHELL := /bin/bash
+.SHELLFLAGS := -o pipefail -ec
+
+ifndef {{ip_name|upper}}_ROOT
+$(error {{ip_name|upper}}_ROOT is not set — source .autoenv.zsh from the repo root first)
+endif
+ifndef BLUESPEC_HOME
+$(error BLUESPEC_HOME is not set — point it at your bsc installation)
+endif
 
 # ---------------------------------------------------------------------------
 # Paths & variables
 # ---------------------------------------------------------------------------
-VERILOG_DIR   := $({{ip_name|capitalize}}_ROOT)/verilog
+VERILOG_DIR   := $({{ip_name|upper}}_ROOT)/verilog
 TOP_MODULE    := mk{{ip_name|capitalize}}
-TOP_FILE      := $(VERILOG_DIR)/$(TOP_MODULE).v
 REPORT_DIR    := reports
 CDC_SCRIPT    := cdc_check.tcl
+CDC_JSON      := $(REPORT_DIR)/cdc_netlist.json
 
-# Collect all Verilog sources
-VLOG_SRCS     := $(wildcard $(VERILOG_DIR)/*.v)
+export YOSYS_TOP=$(TOP_MODULE)
+export YOSYS_VLOG_DIR=$(VERILOG_DIR)
+export YOSYS_JSON=$(CDC_JSON)
+export BLUESPEC_HOME
 
 # ---------------------------------------------------------------------------
 # Default target
 # ---------------------------------------------------------------------------
 all: yosys_cdc
 
-# ---------------------------------------------------------------------------
-# Create report directory
-# ---------------------------------------------------------------------------
 $(REPORT_DIR):
 	mkdir -p $(REPORT_DIR)
 
 # ---------------------------------------------------------------------------
-# Yosys-based CDC check (open-source)
-#
-# Uses Yosys to elaborate the design and a custom Tcl script to identify
-# signals that cross clock domain boundaries. This is a best-effort
-# structural analysis — it does NOT replace a full CDC verification tool
-# but catches common issues early.
+# Yosys + Python CDC check (open-source)
 # ---------------------------------------------------------------------------
 .PHONY: yosys_cdc
 yosys_cdc: $(REPORT_DIR)
 	@echo "=== Yosys CDC Check: $(TOP_MODULE) ==="
-	YOSYS_TOP=$(TOP_MODULE) \
-	YOSYS_VLOG_DIR=$(VERILOG_DIR) \
-	YOSYS_REPORT_DIR=$(REPORT_DIR) \
-	yosys -c $(CDC_SCRIPT) \
-		2>&1 | tee $(REPORT_DIR)/yosys_cdc.log
+	yosys -c $(CDC_SCRIPT) 2>&1 | tee $(REPORT_DIR)/yosys_cdc.log
+	python3 $({{ip_name|upper}}_ROOT)/scripts/cdc_report.py \
+		--json $(CDC_JSON) \
+		--out $(REPORT_DIR)/cdc_report.txt
 	@echo "Report: $(REPORT_DIR)/cdc_report.txt"
 
 # ---------------------------------------------------------------------------
@@ -77,7 +84,7 @@ clean:
 .PHONY: help
 help:
 	@echo "CDC targets for {{ip_name}}:"
-	@echo "  make              — run Yosys CDC check (default)"
-	@echo "  make yosys_cdc    — Yosys + Tcl-based CDC analysis"
+	@echo "  make              — run Yosys+Python CDC check (default)"
+	@echo "  make yosys_cdc    — structural CDC analysis"
 	@echo "  make spyglass_cdc — SpyGlass CDC (stub)"
 	@echo "  make clean        — remove reports"

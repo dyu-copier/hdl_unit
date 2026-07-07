@@ -4,62 +4,77 @@
 # Description: {{ip_short_desc}}
 #
 # Target module: mk{{ip_name|capitalize}}
-# Default clock: {{clock_freq_mhz}} MHz ({{ (1000 / clock_freq_mhz) | round(3) }} ns period)
+# Default clock: {{clock_freq_mhz}} MHz
+#
+# All I/O budgets, uncertainty and transition limits are computed as
+# percentages of the clock period so they stay sane when clock_freq_mhz
+# changes. They are generic placeholders — tighten per-interface once the
+# spec provides real timing numbers.
 # ============================================================================
 
 # ----------------------------------------------------------------------
-# Clock definition
-# Create clock on port CLK with 50% duty cycle
-# Target: {{clock_freq_mhz}} MHz
+# Clock definition — 50% duty cycle on port CLK
 # ----------------------------------------------------------------------
-{% set period_ns = (1000.0 / clock_freq_mhz) | round(3) -%}
-create_clock -name clk -period {{period_ns}} -waveform {0.0 {{ (period_ns / 2) | round(3) }}} [get_ports CLK]
+set CLK_PERIOD [expr { 1000.0 / {{clock_freq_mhz}} }]  ;# ns
+
+create_clock -name clk -period $CLK_PERIOD \
+    -waveform [list 0.0 [expr { $CLK_PERIOD / 2.0 }]] \
+    [get_ports CLK]
 
 # ----------------------------------------------------------------------
-# Clock uncertainty
-# Accounts for jitter and skew in the clock network
-# Tighten for high-performance designs; relax for early exploration
+# Clock uncertainty / transition — 5% / 2% of period (jitter + skew)
 # ----------------------------------------------------------------------
-set_clock_uncertainty 0.1 [get_clocks clk]
+set_clock_uncertainty -setup [expr { $CLK_PERIOD * 0.05 }] [get_clocks clk]
+set_clock_uncertainty -hold  0.05                          [get_clocks clk]
+set_clock_transition  [expr { $CLK_PERIOD * 0.02 }]        [get_clocks clk]
 
 # ----------------------------------------------------------------------
-# Input delay constraints
-# Specifies when data arrives at input ports relative to the clock edge.
-# Set to 30% of clock period as a reasonable default.
-# Adjust per-port if specific interface timing is known.
+# Reset: asynchronous, active-low (project convention). The reset input
+# is a false path — it must be synchronized inside the reset controller,
+# not timed here.
 # ----------------------------------------------------------------------
-set_input_delay  -clock clk -max 3.0 [all_inputs]
-set_input_delay  -clock clk -min 0.5 [all_inputs]
-
-# Remove input delay from the clock port itself
-set_input_delay  -clock clk 0.0 [get_ports CLK]
+set_false_path -from [get_ports RST_N]
 
 # ----------------------------------------------------------------------
-# Output delay constraints
-# Specifies the required data setup time at output ports relative to
-# the clock edge. Set to 30% of clock period as a reasonable default.
+# I/O timing budgets — 30% of period (max), small hold margin (min).
+# CLK and RST_N are excluded from the I/O delay set rather than being
+# assigned a zero delay.
 # ----------------------------------------------------------------------
-set_output_delay -clock clk -max 3.0 [all_outputs]
-set_output_delay -clock clk -min 0.5 [all_outputs]
+set IO_MAX [expr { $CLK_PERIOD * 0.30 }]
+set IO_MIN [expr { $CLK_PERIOD * 0.05 }]
+
+set data_inputs {}
+foreach port [all_inputs] {
+    set port_name [get_name $port]
+    if {$port_name ne "CLK" && $port_name ne "RST_N"} {
+        lappend data_inputs $port
+    }
+}
+set data_outputs [all_outputs]
+
+set_input_delay  -clock clk -max $IO_MAX $data_inputs
+set_input_delay  -clock clk -min $IO_MIN $data_inputs
+set_output_delay -clock clk -max $IO_MAX $data_outputs
+set_output_delay -clock clk -min $IO_MIN $data_outputs
 
 # ----------------------------------------------------------------------
-# Max fanout
-# Limits the maximum fanout on any net to control load and transition.
-# Tools will insert buffers to meet this constraint.
+# Environment: driving cell and output load (adjust for the PDK).
+# Placeholders — uncomment and set real cells/caps for sign-off.
+# ----------------------------------------------------------------------
+# set_driving_cell -lib_cell <buffer_cell> $data_inputs
+# set_load <cap_pf> $data_outputs
+
+# ----------------------------------------------------------------------
+# Max fanout / max transition — 10% of period slew budget
 # ----------------------------------------------------------------------
 set_max_fanout 20 [current_design]
-
-# ----------------------------------------------------------------------
-# Max transition
-# Limits the maximum signal transition time (slew) to prevent
-# excessive delay and signal integrity issues.
-# ----------------------------------------------------------------------
-set_max_transition 0.5 [current_design]
+set_max_transition [expr { $CLK_PERIOD * 0.10 }] [current_design]
 
 # ----------------------------------------------------------------------
 # Additional constraints
-# Add design-specific false paths, multicycle paths, and
-# case analysis below as the design matures.
+# Add design-specific false paths, multicycle paths, and case analysis
+# below as the design matures. Cite the spec section justifying each
+# exception in a comment next to it.
 # ----------------------------------------------------------------------
 # set_false_path -from [get_clocks clk_async] -to [get_clocks clk]
 # set_multicycle_path 2 -setup -from [get_pins ...] -to [get_pins ...]

@@ -11,18 +11,23 @@
 
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
 # ----------------------------------------------------------------------
 # Directory and file configuration
 # ----------------------------------------------------------------------
-VERILOG_DIR   ?= $({{ip_name|capitalize}}_ROOT)/verilog
+VERILOG_DIR   ?= $({{ip_name|upper}}_ROOT)/verilog
 TOP_MODULE    ?= mk{{ip_name|capitalize}}
+{% if liberty_file -%}
+LIBERTY_FILE  ?= {{liberty_file}}
+{%- else -%}
 LIBERTY_FILE  ?= $(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
-SDC_FILE      ?= $({{ip_name|capitalize}}_ROOT)/constraints/{{ip_name}}.sdc
+{%- endif %}
+SDC_FILE      ?= $({{ip_name|upper}}_ROOT)/constraints/{{ip_name}}.sdc
 
 OUTPUT_DIR    := output
 REPORTS_DIR   := reports
-SCRIPTS_DIR   := $({{ip_name|capitalize}}_ROOT)/synth
+SCRIPTS_DIR   := $({{ip_name|upper}}_ROOT)/synth
 
 # Tool paths (override as needed)
 YOSYS         ?= yosys
@@ -54,7 +59,7 @@ synth_yosys: dirs
 	echo "============================================"; \
 	echo " Yosys Synthesis: $(TOP_MODULE)"; \
 	echo "============================================"; \
-	LIBERTY_FILE=$(LIBERTY_FILE) $(YOSYS) -c $(SCRIPTS_DIR)/yosys_synth.tcl; \
+	LIBERTY_FILE=$(LIBERTY_FILE) $(YOSYS) -c $(SCRIPTS_DIR)/yosys_synth.tcl 2>&1 | tee $(REPORTS_DIR)/yosys_synth.log; \
 	test -f $(OUTPUT_DIR)/$(TOP_MODULE)_synth.v; \
 	echo "Synthesis complete. Netlist: $(OUTPUT_DIR)/$(TOP_MODULE)_synth.v"; \
 	echo "Reports written to: $(REPORTS_DIR)/"

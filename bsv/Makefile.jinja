@@ -1,30 +1,57 @@
+# ============================================================================
+# BSV build Makefile — {{ip_name}}
+# Compiles bsv/{{ip_name}}.bsv to Verilog in $({{ip_name|upper}}_ROOT)/verilog.
+#
+# Bluespec primitive Verilog models (FIFO*.v, SizedFIFO.v, BRAM*.v) are
+# copied from $(BLUESPEC_HOME)/lib/Verilog into the verilog/ output dir so
+# downstream flows that cannot take a library search path (LibreLane) see a
+# self-contained source directory.
+#
+# Waveform dumping is owned by the testbench (tb/dump.v) — nothing is
+# injected into the generated netlist, so lint/synth/formal see clean RTL.
+# ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
-BO_DIR ?= bo
-TOP_FILE = $({{ip_name|capitalize}}_ROOT)/verilog/mk{{ip_name|capitalize}}.v
+.SHELLFLAGS := -o pipefail -ec
 
-build_opts= -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -verilog -remove-dollar -steps 10000000 -vdir $({{ip_name|capitalize}}_ROOT)/verilog -bdir $(BO_DIR) -info-dir $(BO_DIR) -aggressive-conditions -no-warn-action-shadowing -no-show-timestamps -check-assert -show-range-conflict -keep-fires
+ifndef {{ip_name|upper}}_ROOT
+$(error {{ip_name|upper}}_ROOT is not set — run via the top-level Makefile or source .autoenv.zsh first)
+endif
+ifndef BLUESPEC_HOME
+$(error BLUESPEC_HOME is not set — point it at your bsc installation)
+endif
+
+BO_DIR ?= bo
+VERILOG_DIR = $({{ip_name|upper}}_ROOT)/verilog
+TOP_FILE = $(VERILOG_DIR)/mk{{ip_name|capitalize}}.v
+
+build_opts= -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -verilog -remove-dollar -steps 10000000 -vdir $(VERILOG_DIR) -bdir $(BO_DIR) -info-dir $(BO_DIR) -aggressive-conditions -no-warn-action-shadowing -no-show-timestamps -check-assert -show-range-conflict -keep-fires
 
 build: folders rdl
-	$(MAKE) build_bsv 
+	$(MAKE) build_bsv
+
 rdl:
 	$(MAKE) -C ../systemrdl
+
 folders:
 	mkdir -p $(BO_DIR)
-	mkdir -p $({{ip_name|capitalize}}_ROOT)/verilog/
+	mkdir -p $(VERILOG_DIR)
 
 build_bsv: copy_files
-	set -e; $(BLUESPEC_HOME)/bin/bsc $(build_opts) {{ip_name}}.bsv
-	grep -q dumpfile $(TOP_FILE) || sed -i 's/endmodule/initial begin\n  $$dumpfile("decode.vcd");\n  $$dumpvars;\nend\nendmodule/' $(TOP_FILE)
+	$(BLUESPEC_HOME)/bin/bsc $(build_opts) {{ip_name}}.bsv
 
 copy_files:
-	bsc_v="$(BLUESPEC_HOME)/lib/Verilog"; \
-	if [ -d "$$bsc_v" ]; then \
-	    cp -p "$$bsc_v"/FIFO*.v     "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
-	    cp -p "$$bsc_v"/FIFOL*.v    "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
-	    cp -p "$$bsc_v"/SizedFIFO.v "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
-	    cp -p "$$bsc_v"/BRAM*.v     "$({{ip_name|capitalize}}_ROOT)/verilog/" 2>/dev/null || true; \
-	    echo "BSC Verilog models copied from $$bsc_v"; \
-	else \
-	    echo "Warning: no lib/Verilog dir found under $(BLUESPEC_HOME)"; \
+	bsc_v="$(BLUESPEC_HOME)/lib/Verilog"
+	if [ -d "$$bsc_v" ]; then
+	    cp -p "$$bsc_v"/FIFO*.v     $(VERILOG_DIR)/ 2>/dev/null || true
+	    cp -p "$$bsc_v"/FIFOL*.v    $(VERILOG_DIR)/ 2>/dev/null || true
+	    cp -p "$$bsc_v"/SizedFIFO.v $(VERILOG_DIR)/ 2>/dev/null || true
+	    cp -p "$$bsc_v"/BRAM*.v     $(VERILOG_DIR)/ 2>/dev/null || true
+	    echo "BSC Verilog models copied from $$bsc_v"
+	else
+	    echo "Warning: no lib/Verilog dir found under $(BLUESPEC_HOME)"
 	fi
+
+clean:
+	rm -rf $(BO_DIR)
+	rm -rf $(VERILOG_DIR)

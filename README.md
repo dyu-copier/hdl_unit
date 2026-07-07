@@ -5,8 +5,9 @@ A [Copier](https://copier.readthedocs.io) template for scaffolding unit-level RT
 ## Requirements
 
 - [Copier](https://copier.readthedocs.io) >= 9.x
-- Python >= 3.10
-- [Bluespec Compiler (bsc)](https://github.com/B-Lang-Org/bsc) - default toolchain for RTL; install expected at `/tools/bsc-2025.01`
+- Python >= 3.12
+- [Bluespec Compiler (bsc)](https://github.com/B-Lang-Org/bsc) - default toolchain for RTL; set `BLUESPEC_HOME` in your environment to its installation path
+- Run `make check_env` in a generated project to probe for all required/optional tools
 - Tool-specific requirements depend on which flows you enable (see [Flows](#flows))
 
 ## Usage
@@ -57,7 +58,7 @@ Copier will prompt for the following:
 +-- ci/             # CI pipeline scripts
 +-- Makefile
 +-- pyproject.toml
-+-- .autoenv.zsh    # Shell environment (sets ROOT, BLUESPEC_HOME, BSC_PATH)
++-- .autoenv.zsh    # Shell environment (sets <IP>_ROOT, BSC_PATH; requires BLUESPEC_HOME)
 ```
 
 ## Flows
@@ -70,6 +71,9 @@ All flows are driven from the top-level `Makefile`:
 | `rtl` | Compile RTL (BSV -> Verilog) | bsc |
 | `lint` | Static linting | Verilator, Verible, Spyglass |
 | `test` | Simulation / testbench | cocotb |
+| `cdc` | Clock-domain-crossing structural check | Yosys + Python |
+| `testplan` | Generate `doc/testplan.md` from `testplan/features/*.md` | |
+| `check_env` | Probe for required/optional tools | |
 | `formal` | Formal verification | SymbiYosys, JasperGold |
 | `synth` | Logic synthesis | Yosys, Synopsys DC, Cadence Genus |
 | `sta` | Static timing analysis | OpenSTA, Synopsys PrimeTime |
@@ -78,8 +82,8 @@ All flows are driven from the top-level `Makefile`:
 | `drc` | DRC / LVS | Magic, Cadence Calibre |
 | `fpga` | FPGA prototyping | Vivado, Quartus |
 | `doc` | Generate documentation | |
-| `all` | `csr -> rtl -> lint -> test -> synth` | |
-| `ci_quick` | `lint -> csr -> rtl -> test` | |
+| `all` | `rtl -> lint -> test -> synth` (rtl regenerates CSRs itself) | |
+| `ci_quick` | `rtl -> lint -> test` | |
 | `ci_full` | Full end-to-end flow | |
 | `clean` | Remove all build artifacts | |
 

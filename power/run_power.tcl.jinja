@@ -8,7 +8,11 @@ set top_module  mk{{ip_name|capitalize}}
 set netlist     $::env(NETLIST)
 set activity    $::env(ACTIVITY)
 set sdc_file    ../constraints/{{ip_name}}.sdc
-set lib_file    $::env(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+if {[info exists ::env(LIB_FILE)] && $::env(LIB_FILE) ne ""} {
+    set lib_file $::env(LIB_FILE)
+} else {
+    set lib_file $::env(PDK_ROOT)/sky130A/libs.ref/sky130_fd_sc_hd/lib/sky130_fd_sc_hd__tt_025C_1v80.lib
+}
 set report_dir  reports
 
 file mkdir $report_dir

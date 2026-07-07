@@ -1,4 +1,4 @@
-.PHONY: all bsv sv doc html python ral
+.PHONY: all bsv sv doc html python ral clean
 
 # Default: generate BSV from RDL, compile with bsc, output Verilog to ../verilog/
 all: bsv
@@ -8,11 +8,11 @@ bsv: {{ip_name}}.rdl
 
 # Generate SystemVerilog register block directly from RDL (no BSC step)
 sv: {{ip_name}}.rdl
-	peakrdl regblock --cpuif axi4-lite-flat --default-reset arst_n {{ip_name}}.rdl -o ../verilog
+	peakrdl regblock --cpuif apb4-flat --default-reset arst_n {{ip_name}}.rdl -o ../verilog
 
 doc: {{ip_name}}.rdl
 	peakrdl markdown {{ip_name}}.rdl  -o ../doc/registers.md
-	sed -ie 's/## {{ip_name|capitalize}}_Reg address map/# {{ip_name|capitalize}}_Reg address map/'  ../doc/registers.md
+	sed -i -e 's/## {{ip_name|capitalize}}_Reg address map/# {{ip_name|capitalize}}_Reg address map/'  ../doc/registers.md
 
 html:
 	mkdir -p html
@@ -24,3 +24,6 @@ python:
 # Generate cocotb RAL model from RDL for use by tb/test_default.py
 ral: {{ip_name}}.rdl
 	peakrdl cocotb_ralgen {{ip_name}}.rdl -o ../tb/
+
+clean:
+	rm -rf html

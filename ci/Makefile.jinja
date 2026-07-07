@@ -8,8 +8,9 @@
 # ============================================================================
 .ONESHELL:
 SHELL=/bin/bash
+.SHELLFLAGS := -o pipefail -ec
 
-PROJECT_ROOT ?= $({{ip_name|capitalize}}_ROOT)
+PROJECT_ROOT ?= $({{ip_name|upper}}_ROOT)
 REPORTS_DIR  ?= $(PROJECT_ROOT)/ci/reports
 SUMMARY_FILE ?= $(REPORTS_DIR)/ci_summary.txt
 TIMESTAMP    := $(shell date '+%Y-%m-%d %H:%M:%S')
@@ -19,7 +20,7 @@ TIMESTAMP    := $(shell date '+%Y-%m-%d %H:%M:%S')
 #  Each delegates to the corresponding subdirectory Makefile.
 # ============================================================================
 
-.PHONY: lint csr rtl formal test synth sta power pnr drc
+.PHONY: lint cdc csr rtl formal test synth sta power pnr drc
 
 lint:
 	@echo "\n━━━ [CI] Lint ━━━"
@@ -32,6 +33,10 @@ csr:
 rtl:
 	@echo "\n━━━ [CI] RTL Build ━━━"
 	$(MAKE) -C $(PROJECT_ROOT)/bsv
+
+cdc:
+	@echo "\n━━━ [CI] CDC Check ━━━"
+	$(MAKE) -C $(PROJECT_ROOT)/cdc
 
 formal:
 	@echo "\n━━━ [CI] Formal Verification ━━━"
@@ -68,11 +73,11 @@ drc:
 .PHONY: ci_quick ci_full ci_report
 
 # Quick check — fast feedback for every commit
-ci_quick: lint csr rtl test
+ci_quick: rtl lint test
 	@echo "\n━━━ [CI] Quick checks PASSED ━━━"
 
 # Full flow — complete ASIC pipeline
-ci_full: lint csr rtl formal test synth sta power pnr drc
+ci_full: rtl lint cdc formal test synth sta power pnr drc
 	@echo "\n━━━ [CI] Full flow PASSED ━━━"
 
 # ============================================================================

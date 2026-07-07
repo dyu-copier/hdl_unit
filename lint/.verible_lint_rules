@@ -1,0 +1,27 @@
+# .verible_lint.rules
+# Verible verilog-lint rule configuration
+# Ref: https://chipsalliance.github.io/verible/verilog_lint.html
+#
+# Format: +rule_name   to enable
+#         -rule_name   to disable
+#         rule_name=arg to configure
+
+# ── Naming conventions ────────────────────────────────────────────────────────
++module-filename           # module name must match filename
++parameter-name-style      # parameters UPPER_SNAKE_CASE
++signal-name-style         # signals lower_snake_case
++port-name-suffix          # enforce _i/_o/_io suffixes on ports
+
+# ── Lint rules ────────────────────────────────────────────────────────────────
++always-ff-non-blocking    # no blocking assigns in always_ff
++always-comb-blocking      # no non-blocking in always_comb
++explicit-parameter-storage-type  # parameters must have a type
++explicit-function-lifetime       # functions need lifetime (static/automatic)
++explicit-task-lifetime
++no-trailing-spaces
++posix-eof                 # file must end with newline
++forbid-consecutive-null-statements
++unpacked-dimensions-range-ordering  # [0:N-1] not [N-1:0]
+
+# ── Style (advisory) ──────────────────────────────────────────────────────────
++line-length=120           # warn on lines > 120 chars

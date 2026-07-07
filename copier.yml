@@ -1,5 +1,25 @@
 _subdirectory: .
 _exclude:
+  # copier defaults (must be repeated because overriding _exclude replaces them)
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".svn"
+  # template-repo housekeeping — never copied into a generated project
+  - "main.py"
+  - "bean.log"
+  - "uv.lock"
+  - ".venv"
+  # NOTE: README.md / LICENSE are NOT excluded — excluding them would also
+  # suppress the rendered README.md.jinja / LICENSE.jinja outputs (patterns
+  # match destination paths). The rendered .jinja versions win.
+  - "README.md.orig"
+  - "review_commants.md"
+  # conditional flows
   - "{% if not enable_fpga %}fpga{% endif %}"
   - "{% if not enable_formal %}formal{% endif %}"
   - ".venv"
@@ -18,7 +38,8 @@ _exclude:
 #Questions
 ip_name:
   type: str
-  help: ip name
+  help: "ip name (snake_case, e.g. axi_fifo)"
+  validator: "{% if not ip_name | regex_search('^[a-z][a-z0-9_]+$') %}ip_name must be snake_case: start with a lowercase letter, then lowercase letters, digits or underscores{% endif %}"
 
 ip_short_desc:
   type: str
@@ -72,10 +93,10 @@ fpga_part:
 
 liberty_file:
   type: str
-  help: "Path to liberty (.lib) timing library"
+  help: "Path to liberty (.lib) timing library (leave blank to use $PDK_ROOT default)"
   default: ""
 
 lef_file:
   type: str
-  help: "Path to LEF technology file"
+  help: "Path to LEF technology file (leave blank to use $PDK_ROOT default)"
   default: ""

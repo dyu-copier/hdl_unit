@@ -1,0 +1,28 @@
+# ==============================================================================
+# def2gds.tcl — Magic DEF → GDS conversion for {{ip_name}}
+# Invoked by `make gds` (pnr/Makefile) as:
+#   GDS_TOP=... GDS_DEF=... GDS_LEF="tech.lef cells.lef" GDS_OUT=... \
+#     magic -dnull -noconsole -T <techfile> def2gds.tcl
+# ==============================================================================
+
+set top  $::env(GDS_TOP)
+set def  $::env(GDS_DEF)
+set lefs $::env(GDS_LEF)
+set out  $::env(GDS_OUT)
+
+foreach lef $lefs {
+    puts ">>> Reading LEF: $lef"
+    lef read $lef
+}
+
+puts ">>> Reading DEF: $def"
+def read $def
+
+load $top
+select top cell
+
+puts ">>> Writing GDS: $out"
+gds write $out
+
+puts ">>> DEF->GDS conversion complete."
+quit -noprompt
