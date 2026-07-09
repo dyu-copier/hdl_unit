@@ -2,7 +2,13 @@
 
 Connects:
   - ApbMaster  (cocotbext-apb) to the DUT's APB slave CSR port
-  - AxiRam     (cocotbext-axi) to the DUT's AXI4 master port
+{%- if has_axi_slave %}
+  - AxiMaster  (cocotbext-axi) driving the DUT's AXI4 slave port (axi4_s)
+{%- endif %}
+{%- if has_axi_master %}
+  - AxiRam     (cocotbext-axi) responding to the DUT's AXI4 master port
+               (axi4_m)
+{%- endif %}
   - RAL model  (peakrdl-cocotb-ralgen) for structured register access
 
 Tests:
@@ -14,7 +20,9 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles
 from cocotbext.apb import ApbBus, ApbMaster
-from cocotbext.axi import AxiBus, AxiRam
+{%- if has_axi_slave or has_axi_master %}
+from cocotbext.axi import AxiBus{% if has_axi_slave %}, AxiMaster{% endif %}{% if has_axi_master %}, AxiRam{% endif %}
+{%- endif %}
 from peakrdl_cocotb_ralgen.callbacks.bsv import BSVCallback
 from peakrdl_cocotb_ralgen.testcases import reset_test, rw_test
 from {{ip_name|capitalize}}_Reg_RAL import {{ip_name|capitalize}}_Reg_RAL_Test as RAL
@@ -28,13 +36,46 @@ class BSVCallbackForPeakrdlBsv(BSVCallback):
     submodule (`dut.csr`), with a `__` (double underscore) separator before
     the access-mode suffix. Reach through `dut.csr.<name>` to get the field
     signal handle.
+
+    That per-field `_read` signal only exists for hw=r fields (firmware
+    writes, hardware reads — e.g. CFG_CTRL, INTERRUPT_MASK). For hw=w fields
+    (hardware writes, firmware reads — e.g. INTERRUPT, STS, per the
+    csr-convention block ordering every IP has), peakrdl-bsv emits no
+    per-field readback signal at all, only an aggregate `<reg>_value`
+    register-wide output — fall back to that, bit-sliced.
     """
 
     def sig(self, sigHash):
         reg = sigHash["path"][-2].lower()
         field = sigHash["path"][-1]
         name = f"{reg}_s{field}__read"
-        return getattr(self.dut.csr, name, None)
+        handle = getattr(self.dut.csr, name, None)
+        if handle is not None:
+            return handle
+        # Slicing the aggregate handle directly (agg[high:low]) fails with
+        # "Packed objects... cannot be indexed" once real hw logic drives it
+        # constantly to a fixed value in some configurations (BSC/Verilog
+        # constant-folds a never-written aggregate into a synthesized
+        # constant, which VPI can't bit-select) — shift/mask in Python
+        # instead of asking cocotb to slice the HDL handle.
+        agg = getattr(self.dut.csr, f"{reg}_value", None)
+        if agg is None:
+            return None
+        return _BitSlice(agg, sigHash["high"], sigHash["low"])
+
+
+class _BitSlice:
+    """Presents a [high:low] slice of a wide handle via .value only."""
+
+    def __init__(self, handle, high, low):
+        self._handle = handle
+        self._high = high
+        self._low = low
+
+    @property
+    def value(self):
+        width = self._high - self._low + 1
+        return (int(self._handle.value) >> self._low) & ((1 << width) - 1)
 
 
 class ApbCfgIfc:
@@ -54,11 +95,16 @@ class ApbCfgIfc:
 async def _setup(dut):
     """Shared clock/reset setup; returns (cfg, callback)."""
     cocotb.start_soon(Clock(dut.CLK, 10, units="ns").start())
-
+{% if has_axi_slave %}
+    # AXI4 master driver — issues requests into the DUT's AXI4 slave port.
+    AxiMaster(AxiBus.from_prefix(dut, "axi4_s"), dut.CLK, dut.RST_N,
+              reset_active_level=False)
+{% endif -%}
+{% if has_axi_master %}
     # AXI4 RAM slave — responds to any DUT-initiated AXI4 master transactions.
-    AxiRam(AxiBus.from_prefix(dut, "axi4"), dut.CLK, dut.RST_N,
+    AxiRam(AxiBus.from_prefix(dut, "axi4_m"), dut.CLK, dut.RST_N,
            reset_active_level=False, size=2**16)
-
+{% endif %}
     dut.RST_N.value = 0
     await ClockCycles(dut.CLK, 4)
     dut.RST_N.value = 1

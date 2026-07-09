@@ -1,0 +1,29 @@
+// ============================================================================
+// Lint waivers (verilator_config below) for BSC (Bluespec) library Verilog
+// pulled into {{ip_name}}'s verilog/ output dir.
+//
+// NOTE: don't start any comment line in this file with the bare word
+// "verilator" (case-insensitive) — Verilator treats that as a pragma-
+// comment attempt and errors with BADVLTPRAGMA if what follows isn't a
+// recognized pragma keyword (lint_off, public, tracing_off, ...). This bit
+// us once already; keep "verilator" away from the first-word position.
+//
+// bsv/Makefile's copy_files target copies BSC's own FIFO*.v/SizedFIFO.v/
+// BRAM*.v primitive models from $(BLUESPEC_HOME)/lib/Verilog directly into
+// this IP's verilog/ output dir (LibreLane needs a self-contained source
+// dir), so they can't be scoped out by directory — match by filename
+// instead. This keeps the sim-code-leak detector in verilator.flags
+// (INITIALDLY/STMTDLY kept fatal) fully intact for {{ip_name}}'s own
+// generated RTL (mk{{ip_name|capitalize}}.v, mkConfigCSR_*.v, etc.) — these
+// vendor primitives are outside our control, not signals of a real problem.
+//
+// Author: {{author}} <{{email}}>
+// ============================================================================
+`verilator_config
+
+lint_off -rule INITIALDLY -file "*/FIFO*.v"
+lint_off -rule STMTDLY    -file "*/FIFO*.v"
+lint_off -rule INITIALDLY -file "*/SizedFIFO.v"
+lint_off -rule STMTDLY    -file "*/SizedFIFO.v"
+lint_off -rule INITIALDLY -file "*/BRAM*.v"
+lint_off -rule STMTDLY    -file "*/BRAM*.v"

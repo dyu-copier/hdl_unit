@@ -75,6 +75,20 @@ bus_protocol:
     - "apb"
     - "wishbone"
 
+# AXI4 data-bus interface(s) — independent of each other, so an IP can have
+# a slave (responds to requests), a master (initiates requests, e.g.
+# DMA-style data movement), both, or neither (APB-config-only IP). Every IP
+# always has an APB config/CSR bus regardless of these two.
+has_axi_slave:
+  type: bool
+  help: "Include an AXI4 slave data interface (DUT receives requests, drives responses)"
+  default: true
+
+has_axi_master:
+  type: bool
+  help: "Include an AXI4 master data interface (DUT initiates requests, e.g. DMA-style data movement)"
+  default: false
+
 enable_fpga:
   type: bool
   help: "Include FPGA prototyping flow"

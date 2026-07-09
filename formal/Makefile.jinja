@@ -31,22 +31,35 @@ BRAM_SRCS    := $(wildcard $(VERILOG_DIR)/BRAM*.v)
 VLOG_NO_BRAM := $(filter-out $(BRAM_SRCS),$(VLOG_SRCS))
 
 # ---------------------------------------------------------------------------
-# ZipCPU protocol checkers (Apache 2.0)
-# Downloaded once into formal/zipcpu_checkers/ and reused across runs.
+# Protocol checkers
+#   APB  — ZipCPU wb2axip fapb_slave.v (Apache 2.0), downloaded once into
+#          formal/zipcpu_checkers/ and reused across runs. Always present:
+#          APB is always a slave (config/CSR bus, project convention).
+#   AXI4 — our own formal/checkers/axi4_{slave,master}_checker.v, committed
+#          directly in this template (not downloaded), one per AXI4
+#          interface this IP actually has (has_axi_slave/has_axi_master
+#          copier answers — an IP may have neither, either, or both). The
+#          public ZipCPU faxi_master checker's free bench/formal version is
+#          a deliberately non-functional teaser (own header: "not intended
+#          to be functional... full set of AXI4 properties may be
+#          purchased from Gisselquist Technology, LLC."), so we don't use
+#          it regardless of role.
 # ---------------------------------------------------------------------------
 CHECKER_DIR  := $(FORMAL_DIR)/zipcpu_checkers
 CHECKER_APB  := $(CHECKER_DIR)/fapb_slave.v
-CHECKER_AXI  := $(CHECKER_DIR)/faxi_master.v
 ZIPCPU_BASE  := https://raw.githubusercontent.com/ZipCPU/wb2axip/master/bench/formal
 
+{% if has_axi_slave -%}
+AXI_CHECKERS += $(FORMAL_DIR)/checkers/axi4_slave_checker.v
+{% endif -%}
+{% if has_axi_master -%}
+AXI_CHECKERS += $(FORMAL_DIR)/checkers/axi4_master_checker.v
+{% endif %}
 $(CHECKER_DIR):
 	mkdir -p $(CHECKER_DIR)
 
 $(CHECKER_APB): | $(CHECKER_DIR)
 	wget -q -O $@ $(ZIPCPU_BASE)/fapb_slave.v
-
-$(CHECKER_AXI): | $(CHECKER_DIR)
-	wget -q -O $@ $(ZIPCPU_BASE)/faxi_master.v
 
 # ---------------------------------------------------------------------------
 # Default target
@@ -62,14 +75,22 @@ $(REPORT_DIR):
 # ---------------------------------------------------------------------------
 # SymbiYosys formal verification (open-source, default)
 #
-# Reads DUT Verilog + ZipCPU protocol checkers + SystemVerilog testbench.
+# Reads DUT Verilog + protocol checkers + SystemVerilog testbench.
 # The testbench (tb_mk{{ip_name|capitalize}}) wraps the DUT with:
-#   fapb_slave  — constrains APB master inputs; verifies APB slave outputs.
-#   faxi_master — constrains AXI4 slave inputs; verifies AXI4 master outputs.
+#   fapb_slave           — constrains APB master inputs; verifies APB slave
+#                          outputs.
+{%- if has_axi_slave %}
+#   axi4_slave_checker   — constrains AXI4 master inputs; verifies AXI4
+#                          slave outputs.
+{%- endif %}
+{%- if has_axi_master %}
+#   axi4_master_checker  — verifies AXI4 master outputs; constrains AXI4
+#                          slave-side inputs.
+{%- endif %}
 # All top-level inputs are free variables explored by smtbmc.
 # ---------------------------------------------------------------------------
 .PHONY: sby
-sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	@echo "=== SymbiYosys Formal: $(TB_MODULE) ==="
 	@{ \
 	  printf '[tasks]\nprove\ncover\n\n'; \
@@ -77,13 +98,13 @@ sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_all.sby
@@ -92,7 +113,7 @@ sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 
 # Run only the prove task (used by test.sh)
 .PHONY: sby-prove
-sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	@echo "=== SymbiYosys Prove: $(TB_MODULE) ==="
 	@{ \
 	  printf '[tasks]\nprove\n\n'; \
@@ -100,13 +121,13 @@ sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_prove.sby
@@ -114,7 +135,7 @@ sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 
 # Run only the cover task
 .PHONY: sby-cover
-sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
+sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	@echo "=== SymbiYosys Cover: $(TB_MODULE) ==="
 	@{ \
 	  printf '[tasks]\ncover\n\n'; \
@@ -122,13 +143,13 @@ sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(CHECKER_AXI)
 	  printf '[engines]\nsmtbmc\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
-	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf 'read_verilog -DFORMAL %s\n' "$$f"; done; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(FORMAL_TB)"; \
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  printf '%s\n' "$(CHECKER_AXI)"; \
+	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_cover.sby

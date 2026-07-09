@@ -7,16 +7,43 @@ import {{ip_name|capitalize}}_Reg_csr::*;
 // AXI ID width = 4: keeps awid/arid/bid/rid in the generated Verilog port list
 // so cocotbext-axi's AxiRam / AxiBus can bind them at sim setup. Width can be
 // any integer >= 1; 4 is the AMBA-idiomatic default. See bsv_axi/docs/axi_fixes.md.
+//
+// APB is always the config/CSR bus (slave-only, project convention). The
+// AXI4 data bus is independently configurable: a slave interface (axi4_s,
+// receives requests), a master interface (axi4_m, initiates requests, e.g.
+// DMA-style data movement), both, or neither (has_axi_slave/has_axi_master
+// copier answers) — both field names are used even when only one is
+// present, so every IP has the same naming rule regardless of combination.
 interface {{ip_name|capitalize}}_Ifc;
-  interface AXI4_Master_IFC#(4,32,32,0) axi4;
+{% if has_axi_slave -%}
+  interface AXI4_Slave_IFC#(4,32,32,0) axi4_s;
+{% endif -%}
+{% if has_axi_master -%}
+  interface AXI4_Master_IFC#(4,32,32,0) axi4_m;
+{% endif -%}
   interface APB_Slave_IFC#(32,32,0) apb;
 endinterface
-
+{% if has_axi_slave %}
+// APB and the AXI4 slave both read/write the same single-ported CSR block
+// in this stub, so each operation (read, write) is a single rule with an
+// if/else choosing the source — csr.read/csr.write are single-ported
+// methods, and BSC requires exactly one syntactic call site per method per
+// rule (two separate rules calling the same one-port method is a
+// scheduling error even with descending_urgency, since urgency only orders
+// rules that conflict on state, not calls to a shared limited-port
+// resource). APB is arbitrarily prioritized when both fire the same cycle;
+// real per-IP logic replaces this stub.
+{% endif -%}
 (*synthesize*)
 module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
 
   ConfigCSR_{{ip_name|capitalize}}_Reg csr <- mkConfigCSR_{{ip_name|capitalize}}_Reg();
-  AXI4_Master_Xactor_IFC#(4,32,32,0) xactor <- mkAXI4_Master_Xactor;
+{% if has_axi_slave -%}
+  AXI4_Slave_Xactor_IFC#(4,32,32,0) xactor_s <- mkAXI4_Slave_Xactor;
+{% endif -%}
+{% if has_axi_master -%}
+  AXI4_Master_Xactor_IFC#(4,32,32,0) xactor_m <- mkAXI4_Master_Xactor;
+{% endif -%}
   APB_Slave_Xactor_IFC#(32,32,0) apbif <- mkAPB_Slave_Xactor;
 
   Wire#(APB_request#(32,32,0)) wr_apb_req_first <- mkWire();
@@ -24,27 +51,58 @@ module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
     wr_apb_req_first <= apbif.fifo_side.o_request.first();
   endrule
 
-  rule rl_csr_read if(!wr_apb_req_first.pwrite);
-    let x = wr_apb_req_first;
-    apbif.fifo_side.o_request.deq();
-    let a = x.paddr;
-    let rv <- csr.read(truncate(a));
-    apbif.fifo_side.i_response.enq(
-      APB_response{prdata:rv, pslverr:False, puser:0});
+  Bool apb_read_pending  = apbif.fifo_side.o_request.notEmpty() && !wr_apb_req_first.pwrite;
+  Bool apb_write_pending = apbif.fifo_side.o_request.notEmpty() &&  wr_apb_req_first.pwrite;
+{% if has_axi_slave -%}
+  Bool axi_read_pending  = xactor_s.o_rd_addr.notEmpty;
+  Bool axi_write_pending = xactor_s.o_wr_addr.notEmpty && xactor_s.o_wr_data.notEmpty;
+{% endif %}
+  rule rl_read (apb_read_pending{% if has_axi_slave %} || axi_read_pending{% endif %});
+    if (apb_read_pending) begin
+      let x = wr_apb_req_first;
+      apbif.fifo_side.o_request.deq();
+      let rv <- csr.read(truncate(x.paddr));
+      apbif.fifo_side.i_response.enq(
+        APB_response{prdata:rv, pslverr:False, puser:0});
+    end
+{%- if has_axi_slave %} else begin
+      // Single-beat AXI4 read: one AR beat in, one R beat out with rlast
+      // asserted (burst length is always 1 in this stub).
+      let ra = xactor_s.o_rd_addr.first; xactor_s.o_rd_addr.deq;
+      let rv <- csr.read(truncate(ra.araddr));
+      xactor_s.i_rd_data.enq(AXI4_Rd_Data{rid: ra.arid, rdata: rv, rresp: axi4_resp_okay,
+                                           rlast: True, ruser: 0});
+    end
+{%- endif %}
   endrule
 
-  rule rl_csr_write_apb (apbif.fifo_side.o_request.notEmpty());
-    let x = apbif.fifo_side.o_request.first();
-    if(x.pwrite) begin
+  rule rl_write (apb_write_pending{% if has_axi_slave %} || axi_write_pending{% endif %});
+    if (apb_write_pending) begin
+      let x = wr_apb_req_first;
       apbif.fifo_side.o_request.deq();
-      let a = x.paddr;
-      let d = x.pwdata;
-      let s = x.pstrb;
-      csr.write(truncate(a), d, s);
+      csr.write(truncate(x.paddr), x.pwdata, x.pstrb);
       apbif.fifo_side.i_response.enq(APB_response{prdata:0, pslverr:False, puser:0});
     end
+{%- if has_axi_slave %} else begin
+      // Single-beat AXI4 write: one AW + one W beat in, one B beat out.
+      let wa = xactor_s.o_wr_addr.first; xactor_s.o_wr_addr.deq;
+      let wd = xactor_s.o_wr_data.first; xactor_s.o_wr_data.deq;
+      csr.write(truncate(wa.awaddr), wd.wdata, wd.wstrb);
+      xactor_s.i_wr_resp.enq(AXI4_Wr_Resp{bid: wa.awid, bresp: axi4_resp_okay, buser: 0});
+    end
+{%- endif %}
   endrule
-
-  interface axi4 = xactor.axi_side;
+{% if has_axi_master %}
+  // AXI4 master interface: inert placeholder. xactor_m's request FIFOs are
+  // never filled, so its AXI-side awvalid/arvalid stay low — it never
+  // initiates a transaction. Real per-IP trigger logic (e.g. a
+  // CSR-triggered DMA start) replaces this in the bluespec step.
+{% endif -%}
+{% if has_axi_slave -%}
+  interface axi4_s = xactor_s.axi_side;
+{% endif -%}
+{% if has_axi_master -%}
+  interface axi4_m = xactor_m.axi_side;
+{% endif -%}
   interface apb  = apbif.apb_side;
 endmodule
