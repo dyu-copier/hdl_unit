@@ -11,17 +11,27 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# GITHUB_TOKEN least privilege: checkout only (the tools image is public).
+permissions:
+  contents: read
+
+# Supersede in-flight runs of the same PR/branch; never cancel main builds.
+concurrency:
+  group: {% raw %}${{ github.workflow }}-${{ github.ref }}{% endraw %}
+  cancel-in-progress: {% raw %}${{ github.event_name == 'pull_request' }}{% endraw %}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
       - name: Checkout {{ip_name}}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: {{ip_name}}
 
       - name: Checkout bsv_axi
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dyumnin/bsv_bus_protocols
           path: bsv_axi
@@ -46,7 +56,7 @@ jobs:
 
       - name: Upload build artifacts on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: {{ip_name}}-ci-artifacts
           path: |

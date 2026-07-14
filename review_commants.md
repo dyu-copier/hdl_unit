@@ -404,7 +404,7 @@ point should remain the BSV top.
 - [x] Add `peakrdl` + `peakrdl-cocotb-ralgen` + `pytest` to `pyproject.toml.jinja` (§5.4)
 
 ## P1 — correctness / wire-through
-- [ ] Wire `bus_protocol`, `liberty_file`, `lef_file`, `fpga_part`, `target_process` answers into the flows, or delete the questions (§1.2)
+- [x] Wire `bus_protocol`, `liberty_file`, `lef_file`, `fpga_part`, `target_process` answers into the flows, or delete the questions (§1.2) — liberty/lef/fpga_part/target_process wired; `bus_protocol` deleted 2026-07 (superseded by has_axi_slave/has_axi_master + always-APB CSR bus)
 - [x] Add `ip_name` snake_case validator; audit `| capitalize` usage and ROOT var naming (§1.3)
 - [x] BSV top: connect xactor ↔ CSR (rules incl. 3-arg strobe write); verify master/slave orientation; parameterize VCD name; guard `$dumpvars` injection or move wave dumping to tb (§4.1–4.3)
 - [x] Add `$({{Ip}}_ROOT)`-defined guard with `$(error ...)` in bsv/tb/lint Makefiles (§4.4)
@@ -421,13 +421,13 @@ point should remain the BSV top.
 - [x] Harvest from `_claude/`: check_env.sh (+ `make check_env`), tool-probe guards, richer RDL example, validator, extra questions, SDC/sby snippets — then delete `_claude/` (incl. `mnt/`, `files.zip`) (§16)
 - [x] Template LICENSE (author/year) or add license question (§1.5)
 - [x] README: fix `hdl_unit`/`rtl_unit` naming, Python version, add cdc/testplan rows (§1.6)
-- [ ] Split `doc/refman.md.jinja` into guide + skeleton; vendor pandoc template/filter or guard `$(HOME)/.pandoc` deps (§14.1, §14.3)
+- [x] Split `doc/refman.md.jinja` into guide + skeleton; vendor pandoc template/filter or guard `$(HOME)/.pandoc` deps (§14.1, §14.3) — guards added + plain-HTML fallback when assets absent (2026-07); guide/skeleton split declined per jvs "leave as is"
 - [x] Ship `fpga/program.tcl` or drop the `program` target; `FPGA_PART ?= {{ fpga_part }}` (§13)
 - [x] `.svls.toml`: remove `fpga/verilog` path and `DEBUG/FOO` defines (§15.3)
 - [x] Add an example assertion (BSV `dynamicAssert` or SVA bind) so formal proves something (§12.4)
 - [x] Real make dependencies between stages so `make -j` is safe (§2.1)
 - [x] Pin/document tested tool versions (OpenROAD especially) in README/CI image (§10.4)
-- [ ] Consider a `make smoke` target: generate a project with `copier copy --defaults` into CI and run `ci_quick` — this would have caught most P0s. Strongly recommended as a template-repo CI job.
+- [x] Consider a `make smoke` target: generate a project with `copier copy --defaults` into CI and run `ci_quick` — superseded by `.github/workflows/ci.yml` (2026-07): renders all 4 has_axi combos and runs the full flow (80 tests) on every push/PR.
 
 ---
 ---
@@ -644,9 +644,9 @@ jvs: fix the regex
 # TODO list (Part B)
 
 ## P0 — the flow will not survive first contact
-- [ ] Verify/author the "For AI Agents" README section upstream; add local-clone fallback to `new-ip` (B1.1)
-- [ ] Resolve APB-vs-AXI config-bus contradiction between CLAUDE.md/skills and the template (B1.2)
-- [ ] Ship a convention-compliant default RDL (ID + INTERRUPT block) in the template (B1.3)
+- [x] Verify/author the "For AI Agents" README section upstream; add local-clone fallback to `new-ip` (B1.1) — README section authored; local-clone fallback in the `new-ip` skill (asic_flow repo) still unverified
+- [x] Resolve APB-vs-AXI config-bus contradiction between CLAUDE.md/skills and the template (B1.2) — template now has an always-present APB config/CSR bus (apb4-flat cpuif + APB slave xactor)
+- [x] Ship a convention-compliant default RDL (ID + INTERRUPT block) in the template (B1.3)
 - [x] Fix the Part-A P0 flow bugs before `pnr`-skill use; add "check tool log for clean completion before extracting PPA" to the pnr skill (B1.4)
 - [x] Fix the APB read-rule example in the bluespec skill (`psel && penable`) (B3.1)
 - [x] Fix `env.py.jinja` so it matches the cocotb skill's description of it (B1.7 / Part A §5.2)
@@ -656,11 +656,11 @@ jvs: fix the regex
 - [x] Reconcile refman dispatch mechanism (agent vs. inline skill) across ip-flow and the 8 agent files (B2.2)
 - [x] Add stale-`in_progress` recovery guidance to Status (B2.3)
 - [x] Add `bluespec` to `cocotb`'s depends_on, or split author/run (B2.4)
-- [ ] Add a human-gated regression/closure step (and consider lint/formal/cdc) to the DAG (B2.5)
-- [ ] Structure `open_questions` as `{step, question}` (B2.6)
+- [x] Add a human-gated regression/closure step (and consider lint/formal/cdc) to the DAG (B2.5) — closed per jvs: human review owns closure; the `regression` step supplies the evidence
+- [ ] Structure `open_questions` as `{step, question}` (B2.6) — lives in the asic_flow `.claude` repo, not this template; partially mooted by per-step state files
 - [x] Fix "RO … W1C" wording in csr-convention with proper RDL access types (B3.2)
 - [x] Add cocotbext-* and `cocotbext.dyulib` deps to the template pyproject; document dyulib's source (B1.6)
-- [ ] Add coverage docs + `{{ip_name}}.md` to the template doc pipeline that refman/cocotb assume (B1.5)
+- [ ] Add coverage docs + `{{ip_name}}.md` to the template doc pipeline that refman/cocotb assume (B1.5) — `{{ip_name}}.md` scaffolded; `doc/code_coverage.md` + functional-coverage summary still missing from `doc/Makefile` `files=`
 
 ## P2 — content polish
 - [x] Mark `namedCall`/`namedCallstmt` internals as bsc-version-pinned (B3.3)
@@ -668,7 +668,8 @@ jvs: fix the regex
 - [x] Add "N/A is a valid section state" note to spec §5 subsections (B3.5)
 - [x] Make gen_testplan.py tolerant of hyphen variants or fail loudly on unparsed `## CP-` headings (B3.6)
 - [x] Deduplicate the 8 agents' state-update boilerplate into one referenced protocol doc (B2.8)
-- [ ] Use or drop the `owner` field (B2.7); unify `hdl_unit`/`rtl_unit` naming (B1.8)
+- [ ] Use or drop the `owner` field (B2.7) — lives in the asic_flow `.claude` repo
+- [x] Unify `hdl_unit`/`rtl_unit` naming (B1.8) — template CI workflow renamed to hdl_unit (2026-07-15); the `rtl_unit_tools` docker image and `rtl_unit_docker` repo names are intentionally kept
 
 ---
 
@@ -705,3 +706,22 @@ Deliberately NOT done (no jvs directive, or explicit "leave as is"):
   B2.6 (`open_questions` typing — questions now live per-step, which
   localizes them anyway), B2.7 (`owner` field), B1.5 (coverage docs not yet
   in doc/Makefile `files=`; `{{ip_name}}.md` IS now scaffolded) — left open.
+
+---
+
+# Checklist refresh (2026-07-15)
+
+Boxes above updated after the GitHub Actions template CI went green (80/80,
+all 4 has_axi combos, RTL→GDS). Newly closed since 2026-07-07: §1.2
+(bus_protocol question deleted), §14.1 (pandoc guards + HTML fallback),
+smoke-CI recommendation (superseded by .github/workflows/ci.yml), B1.1
+(README agent section authored), B1.2 (APB config bus), B1.3 (convention
+RDL), B2.5 (closure owned by human review per jvs), B1.8 (CI workflow
+renamed hdl_unit; rtl_unit_tools image name intentionally kept).
+
+Still open:
+- B1.5 — coverage docs (`doc/code_coverage.md`, functional-coverage summary)
+  not in `doc/Makefile` `files=`.
+- B2.6 / B2.7 — `open_questions` typing and `owner` field; both live in the
+  asic_flow `.claude` scaffolding repo, not this template.
+- new-ip skill's offline local-clone fallback (B1.1 residue, asic_flow repo).

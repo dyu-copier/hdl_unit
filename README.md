@@ -27,14 +27,15 @@ Copier will prompt for the following:
 | `email` | Author email | |
 | `target_process` | PDK process node (e.g. `sky130`, `gf180`, `asap7`) | `sky130` |
 | `clock_freq_mhz` | Target clock frequency in MHz | `100` |
-| `bus_protocol` | Bus interface protocol | `axi4-lite` |
+| `has_axi_slave` | Include an AXI4 slave data interface (DUT receives requests) | `true` |
+| `has_axi_master` | Include an AXI4 master data interface (DUT initiates requests, e.g. DMA) | `false` |
 | `enable_fpga` | Include FPGA prototyping flow | `true` |
 | `enable_formal` | Include formal verification flow | `true` |
 | `fpga_part` | FPGA part number (if FPGA enabled) | `xc7a35tcpg236-1` |
 | `liberty_file` | Path to Liberty (.lib) timing library | |
 | `lef_file` | Path to LEF technology file | |
 
-**Bus protocol choices:** `axi4-lite`, `axi4`, `ahb`, `apb`, `wishbone`
+Every IP always has an APB config/CSR bus; `has_axi_slave` / `has_axi_master` independently add AXI4 data interfaces (slave, master, both, or neither).
 
 ## Generated Structure
 
@@ -56,6 +57,8 @@ Copier will prompt for the following:
 +-- systemC/        # SystemC models
 +-- systemrdl/      # SystemRDL register descriptions
 +-- ci/             # CI pipeline scripts
++-- scripts/        # Helper scripts (check_env, testplan/CDC report generators)
++-- testplan/       # Testplan feature checkpoints (feeds doc/testplan.md)
 +-- Makefile
 +-- pyproject.toml
 +-- .autoenv.zsh    # Shell environment (sets <IP>_ROOT, BSC_PATH; requires BLUESPEC_HOME)
@@ -104,7 +107,7 @@ When a user asks "create `<foo>` IP using the rtl_unit flow" (e.g. USB, I2C, DMA
 
 ### 1. Instantiate the template
 
-Run copier non-interactively into a sibling directory of this template. Substitute the concrete IP name/description; keep `target_process=sky130` and `bus_protocol=axi4-lite` unless the user asked for otherwise.
+Run copier non-interactively into a sibling directory of this template. Substitute the concrete IP name/description; keep `target_process=sky130` and the default AXI options (`has_axi_slave=true`, `has_axi_master=false`) unless the user asked for otherwise.
 
 ```sh
 copier copy --defaults --trust \
@@ -115,7 +118,8 @@ copier copy --defaults --trust \
   -d email="<user@…>" \
   -d target_process=sky130 \
   -d clock_freq_mhz=100 \
-  -d bus_protocol=axi4-lite \
+  -d has_axi_slave=true \
+  -d has_axi_master=false \
   -d enable_fpga=true \
   -d enable_formal=true \
   -d liberty_file="" \
@@ -181,7 +185,7 @@ Three options — pick one:
   cat /opt/data/project/rtl_unit_docker/test_summary.txt
   ```
 
-- **GitHub Actions** — the generated IP includes `.github/workflows/ci.yml` (rendered from the template's `.github/workflows/ci.yml.jinja`). Every push and PR runs `make ci_full` inside `ghcr.io/dyu-copier/rtl_unit_tools:latest` against the checked-out IP + a sibling `bsv_axi` repo (assumed `${{ github.repository_owner }}/bsv_axi`). No manual step is needed after `git push` if the repo is on GitHub — check the Actions tab.
+- **GitHub Actions** — the generated IP includes `.github/workflows/ci.yml` (rendered from the template's `.github/workflows/ci.yml.jinja`). Every push and PR runs `make ci_full` inside `ghcr.io/dyu-copier/rtl_unit_tools:latest` against the checked-out IP + the `dyumnin/bsv_bus_protocols` repo (checked out as a sibling `bsv_axi` directory). No manual step is needed after `git push` if the repo is on GitHub — check the Actions tab.
 
 A green run reports `run=... pass=21 fail=0 total=21 ... ALL_PASSED` (for `test.sh`) or `━━━ ci_full (RTL → GDS) DONE ━━━` (for `make ci_full`). Individual failing tests print their tail in `test_summary.txt` (docker flow) — read that, not the full `err.log`, as the starting point for triage.
 

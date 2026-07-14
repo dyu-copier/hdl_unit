@@ -9,7 +9,11 @@
     "pdk::sky130A": {
         "scl::sky130_fd_sc_hd": {
             "CLOCK_PERIOD": {{(1000.0 / clock_freq_mhz) | round(3)}},
-            "FP_CORE_UTIL": 45,
+            {#- With both AXI interfaces the design is pin-limited (~554 IO
+                pins): at 45% utilization the die perimeter is too short for
+                the IO placer. Lower utilization grows the die (perimeter
+                scales with 1/sqrt(util)) to fit the pins. #}
+            "FP_CORE_UTIL": {{ 25 if (has_axi_slave and has_axi_master) else 45 }},
             "PL_TARGET_DENSITY": 0.5
         }
     }

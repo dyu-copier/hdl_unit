@@ -10,7 +10,9 @@
 |------------------|----------------------------|
 | Target Process   | {{ target_process }}       |
 | Clock Frequency  | {{ clock_freq_mhz }} MHz   |
-| Bus Protocol     | {{ bus_protocol }}         |
+| Config Bus       | APB (always present)       |
+| AXI4 Slave       | {{ "yes" if has_axi_slave else "no" }} |
+| AXI4 Master      | {{ "yes" if has_axi_master else "no" }} |
 {%- if enable_fpga %}
 | FPGA Part        | {{ fpga_part }}            |
 {%- endif %}

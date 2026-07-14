@@ -39,6 +39,12 @@ folders:
 
 build_bsv: copy_files
 	$(BLUESPEC_HOME)/bin/bsc $(build_opts) {{ip_name}}.bsv
+{%- if has_axi_slave or has_axi_master %}
+	# Type-check the opt-in AXI4 dynamic protocol monitor (dynamicAssert
+	# based, sim-only — see AXI4_Monitor.bsv header for hookup). Compiled
+	# to .bo only; NOT linked into the synthesized design.
+	$(BLUESPEC_HOME)/bin/bsc -elab -p $(BSC_PATH) +RTS -K128M -RTS -u -bdir $(BO_DIR) -info-dir $(BO_DIR) -no-show-timestamps AXI4_Monitor.bsv
+{%- endif %}
 
 copy_files:
 	bsc_v="$(BLUESPEC_HOME)/lib/Verilog"

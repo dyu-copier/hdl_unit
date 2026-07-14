@@ -14,6 +14,7 @@ _exclude:
   - "bean.log"
   - "uv.lock"
   - ".venv"
+  - ".python-version"
   # NOTE: README.md / LICENSE are NOT excluded — excluding them would also
   # suppress the rendered README.md.jinja / LICENSE.jinja outputs (patterns
   # match destination paths). The rendered .jinja versions win.
@@ -22,18 +23,15 @@ _exclude:
   # conditional flows
   - "{% if not enable_fpga %}fpga{% endif %}"
   - "{% if not enable_formal %}formal{% endif %}"
-  - ".venv"
-  - ".git"
-  - "uv.lock"
   - "*.orig"
-  - "__pycache__"
   - "*.pyc"
   - "*.pyo"
   - "verilog"
   - "bo"
-  # rtl_unit's own template CI does not belong in generated IPs — they get
-  # their own workflow rendered from .github/workflows/ci.yml.jinja instead.
-  - ".github/workflows/ci.yml"
+  # NOTE: the template repo's own .github/workflows/ci.yml is deliberately
+  # NOT excluded — _exclude patterns match destination paths, so excluding
+  # ci.yml would also suppress the rendered ci.yml.jinja output (same reason
+  # README.md / LICENSE are not excluded). The rendered .jinja version wins.
 
 #Questions
 ip_name:
@@ -63,17 +61,6 @@ clock_freq_mhz:
   type: int
   help: "Target clock frequency in MHz"
   default: 100
-
-bus_protocol:
-  type: str
-  help: "Bus protocol"
-  default: "axi4-lite"
-  choices:
-    - "axi4-lite"
-    - "axi4"
-    - "ahb"
-    - "apb"
-    - "wishbone"
 
 # AXI4 data-bus interface(s) — independent of each other, so an IP can have
 # a slave (responds to requests), a master (initiates requests, e.g.

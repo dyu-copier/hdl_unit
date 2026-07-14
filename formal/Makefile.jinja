@@ -30,6 +30,21 @@ VLOG_SRCS    := $(wildcard $(VERILOG_DIR)/*.v)
 BRAM_SRCS    := $(wildcard $(VERILOG_DIR)/BRAM*.v)
 VLOG_NO_BRAM := $(filter-out $(BRAM_SRCS),$(VLOG_SRCS))
 
+# smtbmc without an argument defaults to Yices, which not every sby install
+# ships (e.g. the rtl_unit_tools image has no yices-smt2). Probe PATH for the
+# first available solver and pass it explicitly. Lazy (=) so `make clean` etc.
+# don't run the probe.
+SMT_SOLVER = $(shell if command -v yices-smt2 >/dev/null 2>&1; then echo yices; \
+  elif command -v z3 >/dev/null 2>&1; then echo z3; \
+  elif command -v bitwuzla >/dev/null 2>&1; then echo bitwuzla; \
+  elif command -v boolector >/dev/null 2>&1; then echo boolector; \
+  elif command -v cvc5 >/dev/null 2>&1; then echo cvc5; fi)
+
+# Engine for bounded (mode bmc) tasks: prefer an SMT solver, else fall back
+# to yosys's built-in ABC (always available wherever yosys is). Cover mode
+# has no ABC fallback — it genuinely requires an SMT solver.
+BMC_ENGINE = $(if $(SMT_SOLVER),smtbmc $(SMT_SOLVER),abc bmc3)
+
 # ---------------------------------------------------------------------------
 # Protocol checkers
 #   APB  — ZipCPU wb2axip fapb_slave.v (Apache 2.0), downloaded once into
@@ -54,6 +69,11 @@ AXI_CHECKERS += $(FORMAL_DIR)/checkers/axi4_slave_checker.v
 {% endif -%}
 {% if has_axi_master -%}
 AXI_CHECKERS += $(FORMAL_DIR)/checkers/axi4_master_checker.v
+{% endif -%}
+{% if has_axi_slave or has_axi_master -%}
+# Shared rule body `include`d by both checkers — must be copied into the
+# sby work dir ([files]) but NOT read_verilog'd directly.
+AXI_CHECKER_INC := $(FORMAL_DIR)/checkers/axi4_checker_rules.vh
 {% endif %}
 $(CHECKER_DIR):
 	mkdir -p $(CHECKER_DIR)
@@ -90,12 +110,13 @@ $(REPORT_DIR):
 # All top-level inputs are free variables explored by smtbmc.
 # ---------------------------------------------------------------------------
 .PHONY: sby
-sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
+sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS) $(AXI_CHECKER_INC)
 	@echo "=== SymbiYosys Formal: $(TB_MODULE) ==="
+	@test -n "$(SMT_SOLVER)" || { echo "ERROR: no SMT solver (yices-smt2, z3, bitwuzla, boolector, cvc5) found on PATH — required by sby smtbmc"; exit 1; }
 	@{ \
 	  printf '[tasks]\nprove\ncover\n\n'; \
 	  printf '[options]\nprove: mode bmc\nprove: depth 20\ncover: mode cover\ncover: depth 40\n\n'; \
-	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[engines]\nsmtbmc $(SMT_SOLVER)\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
 	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
@@ -104,7 +125,7 @@ sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
+	  for f in $(AXI_CHECKERS) $(AXI_CHECKER_INC); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_all.sby
@@ -113,12 +134,13 @@ sby: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 
 # Run only the prove task (used by test.sh)
 .PHONY: sby-prove
-sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
+sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS) $(AXI_CHECKER_INC)
 	@echo "=== SymbiYosys Prove: $(TB_MODULE) ==="
+	@test -n "$(SMT_SOLVER)" || echo "WARN: no SMT solver (yices-smt2, z3, bitwuzla, boolector, cvc5) on PATH — falling back to 'abc bmc3'"
 	@{ \
 	  printf '[tasks]\nprove\n\n'; \
 	  printf '[options]\nprove: mode bmc\nprove: depth 20\n\n'; \
-	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[engines]\n$(BMC_ENGINE)\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
 	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
@@ -127,7 +149,7 @@ sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
+	  for f in $(AXI_CHECKERS) $(AXI_CHECKER_INC); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_prove.sby
@@ -135,12 +157,13 @@ sby-prove: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 
 # Run only the cover task
 .PHONY: sby-cover
-sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
+sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS) $(AXI_CHECKER_INC)
 	@echo "=== SymbiYosys Cover: $(TB_MODULE) ==="
+	@test -n "$(SMT_SOLVER)" || { echo "ERROR: no SMT solver (yices-smt2, z3, bitwuzla, boolector, cvc5) found on PATH — required by sby smtbmc"; exit 1; }
 	@{ \
 	  printf '[tasks]\ncover\n\n'; \
 	  printf '[options]\ncover: mode cover\ncover: depth 40\n\n'; \
-	  printf '[engines]\nsmtbmc\n\n'; \
+	  printf '[engines]\nsmtbmc $(SMT_SOLVER)\n\n'; \
 	  printf '[script]\n'; \
 	  printf 'read_verilog -DFORMAL -sv %s\n' "$(CHECKER_APB)"; \
 	  for f in $(AXI_CHECKERS); do printf 'read_verilog -DFORMAL -sv %s\n' "$$f"; done; \
@@ -149,7 +172,7 @@ sby-cover: $(REPORT_DIR) $(FORMAL_TB) $(CHECKER_APB) $(AXI_CHECKERS)
 	  printf 'prep -top $(TB_MODULE)\n\n'; \
 	  printf '[files]\n'; \
 	  printf '%s\n' "$(CHECKER_APB)"; \
-	  for f in $(AXI_CHECKERS); do printf '%s\n' "$$f"; done; \
+	  for f in $(AXI_CHECKERS) $(AXI_CHECKER_INC); do printf '%s\n' "$$f"; done; \
 	  for f in $(VLOG_NO_BRAM); do printf '%s\n' "$$f"; done; \
 	  printf '%s\n' "$(FORMAL_TB)"; \
 	} > $(REPORT_DIR)/$(TB_MODULE)_cover.sby

@@ -1,12 +1,20 @@
-name: rtl_unit template CI
+name: hdl_unit template CI
 
-# Runs the 21 template-scaffolding tests (formerly rtl_unit_docker/test.sh)
-# for all 4 has_axi_slave/has_axi_master combinations (84 tests total) by
-# pulling the pre-built ghcr.io/dyu-copier/rtl_unit_tools image — no docker
-# build step. Runs on a normal ubuntu-latest runner (not job-level
-# `container:`) because that image is a pure-Nix build with no FHS glibc
+# Runs the 20 template-scaffolding tests (formerly rtl_unit_docker/test.sh;
+# the doc test is disabled — no pandoc assets in the tools image) for each
+# has_axi_slave/has_axi_master combination by pulling the pre-built
+# ghcr.io/dyu-copier/rtl_unit_tools image — no docker build step.
+#
+# The 4 combos run as PARALLEL MATRIX JOBS (one runner each) rather than
+# sequentially in one container/job: each runner has its own 120-minute
+# budget and its own CPU/RAM, so a slow combo (e.g. the AXI4 formal
+# checkers' per-ID BMC tracking) can't starve or time out the others.
+# fail-fast is off so one red combo doesn't cancel the rest mid-run.
+#
+# Runs on a normal ubuntu-latest runner (not job-level `container:`)
+# because the tools image is a pure-Nix build with no FHS glibc
 # dynamic-linker path, which breaks GitHub's Node-based actions (checkout
-# etc.) when used as the job container. Fails if any test fails.
+# etc.) when used as the job container.
 
 on:
   push:
@@ -15,18 +23,45 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# GITHUB_TOKEN least privilege: checkout + ghcr.io image pull only.
+permissions:
+  contents: read
+  packages: read
+
+# Supersede in-flight runs of the same PR/branch; never cancel main builds.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - combo: slave_only
+            has_slave: true
+            has_master: false
+          - combo: master_only
+            has_slave: false
+            has_master: true
+          - combo: both
+            has_slave: true
+            has_master: true
+          - combo: neither
+            has_slave: false
+            has_master: false
 
     steps:
-      - name: Checkout rtl_unit (this repo)
-        uses: actions/checkout@v4
+      - name: Checkout hdl_unit (this repo)
+        uses: actions/checkout@v6
         with:
-          path: rtl_unit
+          path: hdl_unit
 
       - name: Checkout bsv_axi
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: dyumnin/bsv_bus_protocols
           path: bsv_axi
@@ -35,7 +70,7 @@ jobs:
         run: find bsv_axi -name '*.bo' -delete 2>/dev/null || true
 
       - name: Log in to ghcr.io
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -44,11 +79,15 @@ jobs:
       - name: Pull rtl_unit_tools image
         run: docker pull ghcr.io/dyu-copier/rtl_unit_tools:latest
 
-      - name: Run 84 template-scaffolding tests (4 combos x 21)
+      - name: Run 20 template-scaffolding tests [${{ matrix.combo }}]
+        env:
+          COMBO: ${{ matrix.combo }}
+          HAS_SLAVE: ${{ matrix.has_slave }}
+          HAS_MASTER: ${{ matrix.has_master }}
         run: |
           {
           IMAGE=ghcr.io/dyu-copier/rtl_unit_tools:latest
-          TEMPLATE_DIR="$GITHUB_WORKSPACE/rtl_unit"
+          TEMPLATE_DIR="$GITHUB_WORKSPACE/hdl_unit"
           BSV_LIB_DIR="$GITHUB_WORKSPACE/bsv_axi"
           IP_DIR="$GITHUB_WORKSPACE/myip"
           RESULTS_DIR="$GITHUB_WORKSPACE/results"
@@ -58,11 +97,13 @@ jobs:
 
           set +e
 
-          docker run -i --name ci_test_run \
+          docker run -i --name "ci_test_run_${COMBO}" \
             -v "$TEMPLATE_DIR:/template:ro" \
             -v "$BSV_LIB_DIR:/bsv_axi:ro" \
             -v "$RESULTS_DIR:/results" \
             -v "$IP_DIR:/tmp/myip" \
+            -e "HAS_SLAVE=${HAS_SLAVE}" \
+            -e "HAS_MASTER=${HAS_MASTER}" \
             "$IMAGE" bash -s << 'CONTAINER_EOF'
 
           set +e
@@ -81,12 +122,9 @@ jobs:
             && echo "==> DIAG: peakrdl=$(which peakrdl)" \
             || echo "==> DIAG: peakrdl NOT FOUND"
 
-          # Copy the working-tree template once, shared across all 4 combos
-          # (only the copier -d has_axi_slave/-d has_axi_master flags differ
-          # per combo, not the source template). Strips directories that
-          # contain symlinks pointing outside the tree (e.g.
-          # .venv/bin/python3 -> /usr/bin/…), which copier 9.16+ rejects
-          # before _exclude filtering can suppress them.
+          # Strips directories that contain symlinks pointing outside the
+          # tree (e.g. .venv/bin/python3 -> /usr/bin/…), which copier 9.16+
+          # rejects before _exclude filtering can suppress them.
           cp -r /template/. /tmp/template_clean
           rm -rf /tmp/template_clean/.venv \
                  /tmp/template_clean/bo \
@@ -94,227 +132,210 @@ jobs:
                  /tmp/template_clean/__pycache__ \
                  /tmp/template_clean/.git
 
-          run_combo() {
-            local combo="$1" has_slave="$2" has_master="$3"
-            local IP_DIR="/tmp/myip_${combo}"
-            local k="${combo}_"
+          IP_DIR=/tmp/myip
 
-            rm -rf "$IP_DIR"
+          # ---- 1. copier: generate a test project from the template ----
+          out=$(copier copy --overwrite --trust --defaults \
+            -d ip_name=myip \
+            -d ip_short_desc="CI test IP" \
+            -d ip_long_desc="Auto-generated IP for testing" \
+            -d author="CI Bot" \
+            -d email="ci@example.com" \
+            -d target_process=sky130 \
+            -d clock_freq_mhz=100 \
+            -d has_axi_slave=$HAS_SLAVE \
+            -d has_axi_master=$HAS_MASTER \
+            -d enable_fpga=true \
+            -d enable_formal=true \
+            -d liberty_file="" \
+            -d lef_file="" \
+            /tmp/template_clean "$IP_DIR" 2>&1 </dev/null)
+          [ $? -eq 0 ] && pass "1_copier" || fail "1_copier" "$out"
 
-            # ---- 1. copier: generate a test project from the template ----
-            out=$(copier copy --overwrite --trust --defaults \
-              -d ip_name=myip \
-              -d ip_short_desc="CI test IP" \
-              -d ip_long_desc="Auto-generated IP for testing" \
-              -d author="CI Bot" \
-              -d email="ci@example.com" \
-              -d target_process=sky130 \
-              -d clock_freq_mhz=100 \
-              -d bus_protocol=axi4-lite \
-              -d has_axi_slave=$has_slave \
-              -d has_axi_master=$has_master \
-              -d enable_fpga=true \
-              -d enable_formal=true \
-              -d liberty_file="" \
-              -d lef_file="" \
-              /tmp/template_clean "$IP_DIR" 2>&1 </dev/null)
-            [ $? -eq 0 ] && pass "${k}1_copier" || fail "${k}1_copier" "$out"
+          # ---- 2. peakrdl+bsc: RDL → BSV (peakrdl) → Verilog (bsc myip.bsv)
+          export MYIP_ROOT="$IP_DIR"
+          # All AMBA libraries from unified_axi (clean, no Logger/FIFOLevelIfc bugs).
+          # '.' = bsv/ working dir, where peakrdl-generated *_Reg_csr.bsv packages live.
+          export BSC_PATH=.:/bsv_axi/src/axi4:/bsv_axi/src/apb:/bsv_axi/src/common:+
+          out=$(MAKEFLAGS= make -C "$IP_DIR" rtl 2>&1 </dev/null)
+          [ $? -eq 0 ] && pass "2_peakrdl" || fail "2_peakrdl" "$out"
 
-            # ---- 2. peakrdl+bsc: RDL → BSV (peakrdl) → Verilog (bsc myip.bsv)
-            export MYIP_ROOT="$IP_DIR"
-            # All AMBA libraries from unified_axi (clean, no Logger/FIFOLevelIfc bugs).
-            # '.' = bsv/ working dir, where peakrdl-generated *_Reg_csr.bsv packages live.
-            export BSC_PATH=.:/bsv_axi/src/axi4:/bsv_axi/src/apb:/bsv_axi/src/common:+
-            out=$(MAKEFLAGS= make -C "$IP_DIR" rtl 2>&1 </dev/null)
-            [ $? -eq 0 ] && pass "${k}2_peakrdl" || fail "${k}2_peakrdl" "$out"
-
-            # ---- 3. bsc: compile a minimal self-contained BSV module -----
-            mkdir -p /tmp/bsc_bo_${combo}
-            cat > /tmp/bsc_test_${combo}.bsv << 'BSV'
+          # ---- 3. bsc: compile a minimal self-contained BSV module -----
+          mkdir -p /tmp/bsc_bo
+          cat > /tmp/bsc_test.bsv << 'BSV'
           module sysHello(Empty);
             rule r; $display("BSC OK"); $finish; endrule
           endmodule
           BSV
-            out=$(bsc -sim -bdir /tmp/bsc_bo_${combo} -u /tmp/bsc_test_${combo}.bsv 2>&1 </dev/null)
-            [ $? -eq 0 ] && pass "${k}3_bsc" || fail "${k}3_bsc" "$out"
+          out=$(bsc -sim -bdir /tmp/bsc_bo -u /tmp/bsc_test.bsv 2>&1 </dev/null)
+          [ $? -eq 0 ] && pass "3_bsc" || fail "3_bsc" "$out"
 
-            # The BSC top module is mkMyip.v (mk + capitalize(ip_name)).
-            # Exclude BRAM*.v: BSC library BRAMs use $fopen/sim pragmas yosys 0.33 can't parse.
-            local top_v="$IP_DIR/verilog/mkMyip.v"
-            local top_mod=mkMyip
-            local v_files=$(ls "$IP_DIR"/verilog/*.v 2>/dev/null | grep -v 'BRAM' | tr '\n' ' ')
+          # The BSC top module is mkMyip.v (mk + capitalize(ip_name)).
+          # Exclude BRAM*.v: BSC library BRAMs use $fopen/sim pragmas yosys 0.33 can't parse.
+          top_v="$IP_DIR/verilog/mkMyip.v"
+          top_mod=mkMyip
+          v_files=$(ls "$IP_DIR"/verilog/*.v 2>/dev/null | grep -v 'BRAM' | tr '\n' ' ')
 
-            # ---- 4. verilator: lint the top-level BSC-compiled Verilog ---
-            if [ -z "$top_v" ]; then
-              fail "${k}4_verilator" "no mk*.v found - peakrdl/bsc step may have failed"
-            else
-              out=$(verilator --lint-only \
-                -y "$IP_DIR/verilog" \
-                -Wno-UNUSED -Wno-UNDRIVEN -Wno-PINCONNECTEMPTY -Wno-DECLFILENAME \
-                -Wno-WIDTH -Wno-CASEINCOMPLETE -Wno-CASEOVERLAP \
-                -Wno-INITIALDLY -Wno-STMTDLY -Wno-BLKSEQ -Wno-COMBDLY \
-                -Wno-MULTIDRIVEN \
-                "$top_v" 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}4_verilator" || fail "${k}4_verilator" "$out"
-            fi
+          # ---- 4. verilator: lint the top-level BSC-compiled Verilog ---
+          if [ -z "$top_v" ]; then
+            fail "4_verilator" "no mk*.v found - peakrdl/bsc step may have failed"
+          else
+            out=$(verilator --lint-only \
+              -y "$IP_DIR/verilog" \
+              -Wno-UNUSED -Wno-UNDRIVEN -Wno-PINCONNECTEMPTY -Wno-DECLFILENAME \
+              -Wno-WIDTH -Wno-CASEINCOMPLETE -Wno-CASEOVERLAP \
+              -Wno-INITIALDLY -Wno-STMTDLY -Wno-BLKSEQ -Wno-COMBDLY \
+              -Wno-MULTIDRIVEN \
+              "$top_v" 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "4_verilator" || fail "4_verilator" "$out"
+          fi
 
-            # ---- 5. verible: lint the top-level BSC-compiled Verilog -----
-            if [ -z "$top_v" ]; then
-              fail "${k}5_verible" "no mk*.v found - peakrdl/bsc step may have failed"
-            else
-              out=$(verible-verilog-lint \
-                --rules="-no-trailing-spaces,-no-tabs,-explicit-parameter-storage-type,-struct-union-name-style,-parameter-name-style,-typedef-structs-unions" \
-                "$top_v" 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}5_verible" || fail "${k}5_verible" "$out"
-            fi
+          # ---- 5. verible: lint the top-level BSC-compiled Verilog -----
+          if [ -z "$top_v" ]; then
+            fail "5_verible" "no mk*.v found - peakrdl/bsc step may have failed"
+          else
+            out=$(verible-verilog-lint \
+              --rules="-no-trailing-spaces,-no-tabs,-explicit-parameter-storage-type,-struct-union-name-style,-parameter-name-style,-typedef-structs-unions" \
+              "$top_v" 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "5_verible" || fail "5_verible" "$out"
+          fi
 
-            # ---- 6. yosys: synthesise the BSC-compiled CSR Verilog -------
-            if [ -z "$top_v" ]; then
-              fail "${k}6_yosys" "no mk*.v found - peakrdl/bsc step may have failed"
-            else
-              mkdir -p /tmp/yosys_out_${combo}
-              out=$(yosys -p "read_verilog $v_files; synth -top $top_mod; write_verilog /tmp/yosys_out_${combo}/synth.v" 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}6_yosys" || fail "${k}6_yosys" "$out"
-            fi
+          # ---- 6. yosys: synthesise the BSC-compiled CSR Verilog -------
+          if [ -z "$top_v" ]; then
+            fail "6_yosys" "no mk*.v found - peakrdl/bsc step may have failed"
+          else
+            mkdir -p /tmp/yosys_out
+            out=$(yosys -p "read_verilog $v_files; synth -top $top_mod; write_verilog /tmp/yosys_out/synth.v" 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "6_yosys" || fail "6_yosys" "$out"
+          fi
 
-            # ---- 7. formal/Makefile: sby-prove via generated Makefile ----
-            if [ -z "$v_files" ]; then
-              fail "${k}7_sby" "no verilog files found - peakrdl/bsc step may have failed"
-            else
-              out=$(make -C "$IP_DIR/formal" sby-prove 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}7_sby" || fail "${k}7_sby" "$out"
-            fi
+          # ---- 7. formal/Makefile: sby-prove via generated Makefile ----
+          if [ -z "$v_files" ]; then
+            fail "7_sby" "no verilog files found - peakrdl/bsc step may have failed"
+          else
+            out=$(make -C "$IP_DIR/formal" sby-prove 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "7_sby" || fail "7_sby" "$out"
+          fi
 
-            # ---- 8. tb/Makefile: cocotb RAL test (APB + AXI4 + peakrdl-cocotb-ralgen)
-            if [ -z "$v_files" ]; then
-              fail "${k}8_tb_ral" "no verilog files found - peakrdl/bsc step may have failed"
-            else
-              out=$(make -C "$IP_DIR/tb" 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}8_tb_ral" || fail "${k}8_tb_ral" "$out"
-            fi
+          # ---- 8. tb/Makefile: cocotb RAL test (APB + AXI4 + peakrdl-cocotb-ralgen)
+          if [ -z "$v_files" ]; then
+            fail "8_tb_ral" "no verilog files found - peakrdl/bsc step may have failed"
+          else
+            out=$(make -C "$IP_DIR/tb" 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "8_tb_ral" || fail "8_tb_ral" "$out"
+          fi
 
-            # ---- 9. lint/Makefile: verilator lint via generated Makefile -
-            if [ -z "$top_v" ]; then
-              fail "${k}9_lint" "no mk*.v found - BSC step may have failed"
-            else
-              out=$(make -C "$IP_DIR/lint" verilator 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}9_lint" || fail "${k}9_lint" "$out"
-            fi
+          # ---- 9. lint/Makefile: verilator lint via generated Makefile -
+          if [ -z "$top_v" ]; then
+            fail "9_lint" "no mk*.v found - BSC step may have failed"
+          else
+            out=$(make -C "$IP_DIR/lint" verilator 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "9_lint" || fail "9_lint" "$out"
+          fi
 
-            # ---- 10. synth/Makefile: yosys synthesis via generated Makefile
-            if [ -z "$top_v" ]; then
-              fail "${k}10_synth" "no mk*.v found - BSC step may have failed"
-            else
-              out=$(make -C "$IP_DIR/synth" synth_yosys 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}10_synth" || fail "${k}10_synth" "$out"
-            fi
+          # ---- 10. synth/Makefile: yosys synthesis via generated Makefile
+          if [ -z "$top_v" ]; then
+            fail "10_synth" "no mk*.v found - BSC step may have failed"
+          else
+            out=$(make -C "$IP_DIR/synth" synth_yosys 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "10_synth" || fail "10_synth" "$out"
+          fi
 
-            # ---- 11. cdc/Makefile: yosys CDC check via generated Makefile
-            if [ -z "$top_v" ]; then
-              fail "${k}11_cdc" "no mk*.v found - BSC step may have failed"
-            else
-              out=$(make -C "$IP_DIR/cdc" yosys_cdc 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}11_cdc" || fail "${k}11_cdc" "$out"
-            fi
+          # ---- 11. cdc/Makefile: yosys CDC check via generated Makefile
+          if [ -z "$top_v" ]; then
+            fail "11_cdc" "no mk*.v found - BSC step may have failed"
+          else
+            out=$(make -C "$IP_DIR/cdc" yosys_cdc 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "11_cdc" || fail "11_cdc" "$out"
+          fi
 
-            # ---- 12. systemrdl/Makefile: peakrdl markdown doc generation -
-            out=$(make -C "$IP_DIR/systemrdl" doc 2>&1 </dev/null)
-            [ $? -eq 0 ] && pass "${k}12_systemrdl" || fail "${k}12_systemrdl" "$out"
+          # ---- 12. systemrdl/Makefile: peakrdl markdown doc generation -
+          out=$(make -C "$IP_DIR/systemrdl" doc 2>&1 </dev/null)
+          [ $? -eq 0 ] && pass "12_systemrdl" || fail "12_systemrdl" "$out"
 
-            # ---- 13. constraints: sdc file with correct clock constraint
-            if grep -q 'create_clock' "$IP_DIR/constraints/myip.sdc" 2>/dev/null; then
-              pass "${k}13_constraints"
-            else
-              fail "${k}13_constraints" "constraints/myip.sdc missing or lacks create_clock"
-            fi
+          # ---- 13. constraints: sdc file with correct clock constraint
+          if grep -q 'create_clock' "$IP_DIR/constraints/myip.sdc" 2>/dev/null; then
+            pass "13_constraints"
+          else
+            fail "13_constraints" "constraints/myip.sdc missing or lacks create_clock"
+          fi
 
-            # ---- 14. ci: ci/Makefile orchestration — delegates lint via MYIP_ROOT
-            if [ -f "$IP_DIR/ci/Makefile" ]; then
-              out=$(make -C "$IP_DIR/ci" lint 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}14_ci" || fail "${k}14_ci" "$out"
-            else
-              fail "${k}14_ci" "ci/Makefile not generated"
-            fi
+          # ---- 14. ci: ci/Makefile orchestration — delegates lint via MYIP_ROOT
+          if [ -f "$IP_DIR/ci/Makefile" ]; then
+            out=$(make -C "$IP_DIR/ci" lint 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "14_ci" || fail "14_ci" "$out"
+          else
+            fail "14_ci" "ci/Makefile not generated"
+          fi
 
-            # ---- 15. pnr: LibreLane RTL-to-GDS flow (sky130A) ------------
-            if [ -z "$v_files" ]; then
-              fail "${k}15_pnr" "no verilog files found - BSC step may have failed"
-            else
-              out=$(make -C "$IP_DIR/pnr" pnr PDK_ROOT=/opt/pdk 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}15_pnr" || fail "${k}15_pnr" "$out"
-            fi
+          # ---- 15. pnr: LibreLane RTL-to-GDS flow (sky130A) ------------
+          if [ -z "$v_files" ]; then
+            fail "15_pnr" "no verilog files found - BSC step may have failed"
+          else
+            out=$(make -C "$IP_DIR/pnr" pnr PDK_ROOT=/opt/pdk 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "15_pnr" || fail "15_pnr" "$out"
+          fi
 
-            # ---- 16. drc: Magic DRC on LibreLane GDS output --------------
-            if [ ! -f "$IP_DIR/drc/Makefile" ] || [ ! -f "$IP_DIR/drc/magic_drc.tcl" ]; then
-              fail "${k}16_drc" "drc/ template files missing"
-            elif [ -z "$(find "$IP_DIR/pnr/runs" -name 'mkMyip.gds' -path '*/final/gds/*' 2>/dev/null | head -1)" ]; then
-              fail "${k}16_drc" "no GDS found under pnr/runs/ - pnr step may have failed"
-            else
-              out=$(make -C "$IP_DIR/drc" drc PDK_ROOT=/opt/pdk 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}16_drc" || fail "${k}16_drc" "$out"
-            fi
+          # ---- 16. drc: Magic DRC on LibreLane GDS output --------------
+          if [ ! -f "$IP_DIR/drc/Makefile" ] || [ ! -f "$IP_DIR/drc/magic_drc.tcl" ]; then
+            fail "16_drc" "drc/ template files missing"
+          elif [ -z "$(find "$IP_DIR/pnr/runs" -name 'mkMyip.gds' -path '*/final/gds/*' 2>/dev/null | head -1)" ]; then
+            fail "16_drc" "no GDS found under pnr/runs/ - pnr step may have failed"
+          else
+            out=$(make -C "$IP_DIR/drc" drc PDK_ROOT=/opt/pdk 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "16_drc" || fail "16_drc" "$out"
+          fi
 
-            # ---- 17. sta: OpenSTA timing analysis on synthesized netlist -
-            if [ ! -f "$IP_DIR/sta/Makefile" ] || [ ! -f "$IP_DIR/sta/run_sta.tcl" ]; then
-              fail "${k}17_sta" "sta/ template files missing"
-            elif [ ! -f "$IP_DIR/synth/output/mkMyip_synth.v" ]; then
-              fail "${k}17_sta" "synth/output/mkMyip_synth.v missing - run synth first"
-            else
-              out=$(make -C "$IP_DIR/sta" sta PDK_ROOT=/opt/pdk 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}17_sta" || fail "${k}17_sta" "$out"
-            fi
+          # ---- 17. sta: OpenSTA timing analysis on synthesized netlist -
+          if [ ! -f "$IP_DIR/sta/Makefile" ] || [ ! -f "$IP_DIR/sta/run_sta.tcl" ]; then
+            fail "17_sta" "sta/ template files missing"
+          elif [ ! -f "$IP_DIR/synth/output/mkMyip_synth.v" ]; then
+            fail "17_sta" "synth/output/mkMyip_synth.v missing - run synth first"
+          else
+            out=$(make -C "$IP_DIR/sta" sta PDK_ROOT=/opt/pdk 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "17_sta" || fail "17_sta" "$out"
+          fi
 
-            # ---- 18. power: OpenSTA power analysis (LibreLane netlist + cocotb VCD)
-            if [ ! -f "$IP_DIR/power/Makefile" ] || [ ! -f "$IP_DIR/power/run_power.tcl" ]; then
-              fail "${k}18_power" "power/ template files missing"
-            elif [ -z "$(find "$IP_DIR/pnr/runs" -name 'mkMyip.nl.v' -path '*/final/nl/*' 2>/dev/null | head -1)" ]; then
-              fail "${k}18_power" "no gate-level netlist found under pnr/runs/ - pnr step may have failed"
-            elif [ -z "$(find "$IP_DIR/tb" -name '*.vcd' 2>/dev/null | head -1)" ]; then
-              fail "${k}18_power" "no VCD found under tb/ - tb simulation step may have failed"
-            else
-              out=$(make -C "$IP_DIR/power" power PDK_ROOT=/opt/pdk 2>&1 </dev/null)
-              [ $? -eq 0 ] && pass "${k}18_power" || fail "${k}18_power" "$out"
-            fi
+          # ---- 18. power: OpenSTA power analysis (LibreLane netlist + cocotb VCD)
+          if [ ! -f "$IP_DIR/power/Makefile" ] || [ ! -f "$IP_DIR/power/run_power.tcl" ]; then
+            fail "18_power" "power/ template files missing"
+          elif [ -z "$(find "$IP_DIR/pnr/runs" -name 'mkMyip.nl.v' -path '*/final/nl/*' 2>/dev/null | head -1)" ]; then
+            fail "18_power" "no gate-level netlist found under pnr/runs/ - pnr step may have failed"
+          elif [ -z "$(find "$IP_DIR/tb" -name '*.vcd' 2>/dev/null | head -1)" ]; then
+            fail "18_power" "no VCD found under tb/ - tb simulation step may have failed"
+          else
+            out=$(make -C "$IP_DIR/power" power PDK_ROOT=/opt/pdk 2>&1 </dev/null)
+            [ $? -eq 0 ] && pass "18_power" || fail "18_power" "$out"
+          fi
 
-            # ---- 19. doc: pandoc HTML generation --------------------------
-            out=$(make -C "$IP_DIR/doc" doc 2>&1 </dev/null)
-            [ $? -eq 0 ] && pass "${k}19_doc" || fail "${k}19_doc" "$out"
+          # ---- 19. doc: pandoc HTML generation --------------------------
+          # Disabled: the rtl_unit_tools image has no ~/.pandoc assets and
+          # doc's testplan.md input is only produced by the top-level
+          # `make testplan`. Re-enable together with the 19_doc entry in
+          # BASE_TESTS once the image supports doc generation.
+          # out=$(make -C "$IP_DIR/doc" doc 2>&1 </dev/null)
+          # [ $? -eq 0 ] && pass "19_doc" || fail "19_doc" "$out"
 
-            # ---- 20. fpga: template files generated (Vivado) -------------
-            if [ -f "$IP_DIR/fpga/Makefile" ] && [ -f "$IP_DIR/fpga/vivado_flow.tcl" ]; then
-              pass "${k}20_fpga"
-            else
-              fail "${k}20_fpga" "fpga/ template files missing"
-            fi
+          # ---- 20. fpga: template files generated (Vivado) -------------
+          if [ -f "$IP_DIR/fpga/Makefile" ] && [ -f "$IP_DIR/fpga/vivado_flow.tcl" ]; then
+            pass "20_fpga"
+          else
+            fail "20_fpga" "fpga/ template files missing"
+          fi
 
-            # ---- 21. systemC: README generated ----------------------------
-            if [ -f "$IP_DIR/systemC/README.md" ]; then
-              pass "${k}21_systemC"
-            else
-              fail "${k}21_systemC" "systemC/README.md not generated"
-            fi
-          }
-
-          echo "==> DIAG: running combo slave_only (has_axi_slave=true has_axi_master=false)"
-          run_combo "slave_only"  true  false
-          echo "==> DIAG: running combo master_only (has_axi_slave=false has_axi_master=true)"
-          run_combo "master_only" false true
-          echo "==> DIAG: running combo both (has_axi_slave=true has_axi_master=true)"
-          run_combo "both"        true  true
-          echo "==> DIAG: running combo neither (has_axi_slave=false has_axi_master=false)"
-          run_combo "neither"     false false
-
-          # Copy one combo's generated IP (slave_only, the default) out to
-          # the host-mounted /tmp/myip so it's inspectable/uploadable the
-          # same way as before this workflow tested multiple combos.
-          cp -r /tmp/myip_slave_only/. /tmp/myip/ 2>/dev/null || true
+          # ---- 21. systemC: README generated ----------------------------
+          if [ -f "$IP_DIR/systemC/README.md" ]; then
+            pass "21_systemC"
+          else
+            fail "21_systemC" "systemC/README.md not generated"
+          fi
 
           CONTAINER_EOF
           docker_exit=$?
 
           echo "==> DIAG: docker run exit code: $docker_exit"
-          docker inspect -f 'DIAG: OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Error={{.State.Error}}' ci_test_run 2>&1 || true
-          docker rm -f ci_test_run > /dev/null 2>&1 || true
+          docker inspect -f 'DIAG: OOMKilled={{.State.OOMKilled}} ExitCode={{.State.ExitCode}} Error={{.State.Error}}' "ci_test_run_${COMBO}" 2>&1 || true
+          docker rm -f "ci_test_run_${COMBO}" > /dev/null 2>&1 || true
 
           # -------------------------------------------------------------
           # Report (host side — reads $RESULTS_DIR, bind-mounted above)
@@ -322,7 +343,7 @@ jobs:
           RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
           BOLD='\033[1m'; NC='\033[0m'
 
-          echo -e "\n${BOLD}=== Test Report ===${NC}\n"
+          echo -e "\n${BOLD}=== Test Report [$COMBO] ===${NC}\n"
 
           BASE_TESTS=(
             "1_copier:copier           template generation"
@@ -343,25 +364,15 @@ jobs:
             "16_drc:drc/              Magic DRC on LibreLane GDS"
             "17_sta:sta/              OpenSTA timing analysis"
             "18_power:power/            OpenSTA power (LibreLane netlist + VCD)"
-            "19_doc:doc/              pandoc HTML reference manual"
+            # 19_doc disabled — no pandoc assets in tools image (see step 19 above)
             "20_fpga:fpga/             vivado_flow.tcl generated"
             "21_systemC:systemC/          README generated"
           )
 
-          COMBOS=("slave_only" "master_only" "both" "neither")
-
-          TESTS=()
-          for combo in "${COMBOS[@]}"; do
-            for entry in "${BASE_TESTS[@]}"; do
-              key="${entry%%:*}"; label="${entry#*:}"
-              TESTS+=("${combo}_${key}:[$combo] $label")
-            done
-          done
-
           pass_count=0
           fail_count=0
 
-          for entry in "${TESTS[@]}"; do
+          for entry in "${BASE_TESTS[@]}"; do
             key="${entry%%:*}"
             label="${entry#*:}"
             sf="$RESULTS_DIR/${key}.status"
@@ -390,11 +401,11 @@ jobs:
           echo
           total=$((pass_count + fail_count))
 
-          # Write compact summary (read by Haiku agent for analysis — keep brief)
+          # Per-combo compact summary; the report job aggregates all 4.
           SUMMARY="$GITHUB_WORKSPACE/test_summary.txt"
           {
-            echo "run=$(date -Iseconds) pass=$pass_count fail=$fail_count total=$total"
-            for entry in "${TESTS[@]}"; do
+            echo "combo=$COMBO run=$(date -Iseconds) pass=$pass_count fail=$fail_count total=$total"
+            for entry in "${BASE_TESTS[@]}"; do
               key="${entry%%:*}"; label="${entry#*:}"
               sf="$RESULTS_DIR/${key}.status"; df="$RESULTS_DIR/${key}.detail"
               status=$(cat "$sf" 2>/dev/null || echo MISSING)
@@ -416,15 +427,37 @@ jobs:
           } 2>&1 | tee "$GITHUB_WORKSPACE/err.log"
           exit "${PIPESTATUS[0]}"
 
-      - name: Show compact test summary
+      - name: Show compact test summary [${{ matrix.combo }}]
         if: always()
-        run: cat test_summary.txt 2>/dev/null || echo "(no summary written)"
+        run: |
+          if [ -f test_summary.txt ]; then
+            cat test_summary.txt
+            # Also publish to the run's Summary tab
+            {
+              echo "## [${{ matrix.combo }}] test summary"
+              echo '```'
+              cat test_summary.txt
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "(no summary written)"
+          fi
 
-      - name: Upload artifacts on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
+      # Uploaded unconditionally (small) so the report job can aggregate
+      # across all 4 parallel combos into one combined view.
+      - name: Upload per-combo summary
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
-          name: rtl_unit-test-artifacts
+          name: summary-${{ matrix.combo }}
+          path: test_summary.txt
+          if-no-files-found: ignore
+
+      - name: Upload artifacts on failure [${{ matrix.combo }}]
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hdl_unit-test-artifacts-${{ matrix.combo }}
           path: |
             err.log
             test_summary.txt
@@ -434,3 +467,30 @@ jobs:
             myip/synth/output/
             myip/pnr/runs/
           if-no-files-found: ignore
+
+  # Aggregates the 4 parallel matrix jobs' summaries into one view. Purely
+  # informational — the required-check gate is the `test` matrix itself
+  # (any red combo already fails the workflow); this job never fails.
+  report:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all per-combo summaries
+        uses: actions/download-artifact@v8
+        with:
+          pattern: summary-*
+          path: summaries
+          merge-multiple: false
+
+      - name: Combine into one report
+        run: |
+          {
+            echo "## hdl_unit template CI — combined summary (4 parallel combos)"
+            echo '```'
+            for f in summaries/*/test_summary.txt; do
+              [ -f "$f" ] && cat "$f" && echo
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat summaries/*/test_summary.txt 2>/dev/null || echo "(no summaries found)"

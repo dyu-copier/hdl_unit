@@ -34,13 +34,26 @@ puts "\n>>> Reading SDC: $sdc_file"
 read_sdc $sdc_file
 
 # --- Read switching activity (VCD) -----------------------------------------
+# OpenSTA's VCD parser is fragile (e.g. 'Error: stoll' on tokens it cannot
+# parse). If the VCD read fails, fall back to a static activity model so
+# the flow still produces a (less accurate) power estimate — the report
+# header below records which activity source was used.
 puts "\n>>> Reading activity: $activity"
-read_power_activities -scope ${top_module} \
-    -vcd $activity
+if {[catch {read_vcd -scope ${top_module} $activity} err]} {
+    puts "WARN: VCD activity read failed: $err"
+    puts "WARN: falling back to static activity model (input activity 0.1)"
+    set_power_activity -input -activity 0.1
+    set activity_source "static fallback (input activity 0.1); VCD read failed"
+} else {
+    set activity_source "VCD $activity"
+}
 
 # --- Report power ----------------------------------------------------------
-puts "\n>>> Reporting power"
-report_power > $report_dir/${top_module}_power.rpt
+puts "\n>>> Reporting power (activity source: $activity_source)"
+set rpt [open $report_dir/${top_module}_power.rpt w]
+puts $rpt "Activity source: $activity_source"
+close $rpt
+report_power >> $report_dir/${top_module}_power.rpt
 
 puts "\n>>> Power analysis complete. Reports written to $report_dir/"
 exit

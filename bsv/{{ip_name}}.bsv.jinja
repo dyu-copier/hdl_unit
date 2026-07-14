@@ -56,8 +56,15 @@ module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
 {% if has_axi_slave -%}
   Bool axi_read_pending  = xactor_s.o_rd_addr.notEmpty;
   Bool axi_write_pending = xactor_s.o_wr_addr.notEmpty && xactor_s.o_wr_data.notEmpty;
+
+  // APB has a hard response deadline (the formal APB checker allows at most
+  // F_OPT_MAXSTALL=4 stall cycles), AXI4 has none. rl_read and rl_write can
+  // conflict on the shared single-ported CSR, so if either rule serviced AXI
+  // while the other held a pending APB request, a continuous AXI stream
+  // could starve APB past its deadline. Each rule therefore only takes AXI
+  // work when the OTHER rule has no APB request waiting.
 {% endif %}
-  rule rl_read (apb_read_pending{% if has_axi_slave %} || axi_read_pending{% endif %});
+  rule rl_read (apb_read_pending{% if has_axi_slave %} || (axi_read_pending && !apb_write_pending){% endif %});
     if (apb_read_pending) begin
       let x = wr_apb_req_first;
       apbif.fifo_side.o_request.deq();
@@ -76,7 +83,7 @@ module mk{{ip_name|capitalize}}({{ip_name|capitalize}}_Ifc);
 {%- endif %}
   endrule
 
-  rule rl_write (apb_write_pending{% if has_axi_slave %} || axi_write_pending{% endif %});
+  rule rl_write (apb_write_pending{% if has_axi_slave %} || (axi_write_pending && !apb_read_pending){% endif %});
     if (apb_write_pending) begin
       let x = wr_apb_req_first;
       apbif.fifo_side.o_request.deq();

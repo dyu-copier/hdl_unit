@@ -221,3 +221,8 @@ systemrdl/html/
 
 # Documentation output
 *.pdf
+
+# Editor swap/backup files
+.*.sw?
+*.sw?
+*~

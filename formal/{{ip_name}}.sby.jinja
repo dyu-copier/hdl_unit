@@ -60,6 +60,10 @@ cover: depth 40
 #
 # For BSV-generated designs the default smtbmc (yices) is a solid starting
 # point.  Switch to abc pdr for unbounded proofs on simpler properties.
+#
+# NOTE: bare 'smtbmc' requires yices-smt2 on PATH. The Makefile's sby-*
+# targets probe PATH and pass an available solver explicitly; if you run
+# sby manually and lack yices, write e.g. 'smtbmc z3' here.
 # ---------------------------------------------------------------------------
 [engines]
 smtbmc
